@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
-#include "..\include\knob.hh"
-
+#include "../include/knob.hh" //for mac users
+//#include "..\include\knob.hh" //for windows users (chumps)
+#include <ES_CAN.h>
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
 
@@ -49,6 +50,9 @@ volatile uint8_t note;
 
 // Global knobs
 Knob knob0, knob1, knob2, knob3;
+
+// CAN Stuff
+volatile uint8_t TX_Message[8] = {0};
 
 // Function to set outputs using key matrix
 void setOutMuxBit(const uint8_t bitIdx, const bool value)
@@ -127,6 +131,12 @@ void updateDisplayTask(void *pvParameters)
     // note showing
     u8g2.drawStr(2, 30, notes[note]);
     // direction of rotation
+
+    //displaying the transfer message
+    u8g2.setCursor(66,30);
+    u8g2.print((char) TX_Message[0]);
+    u8g2.print(TX_Message[1]);
+    u8g2.print(TX_Message[2]);
     u8g2.sendBuffer(); // transfer internal memory to the display
 
     // Toggle LED
@@ -142,6 +152,7 @@ void scanKeysTask(void *pvParameters)
   uint8_t keymatrix, current_rotation;
   uint32_t curStep;
   uint16_t toAnd, keys;
+  int prevKey;
   bool pressed;
 
   while (1)
@@ -164,12 +175,21 @@ void scanKeysTask(void *pvParameters)
         curStep = stepSizes[i];
         note = i;
         pressed = true;
+        //setting message to press
+        prevKey = i;
+        TX_Message[0] = 'P'; //press or release
+        TX_Message[1] = 4; //octave -> need to come back to
+        TX_Message[2] = i; //key being pressed
       }
       toAnd = toAnd << 1;
     }
     if (!pressed)
     {
       curStep = 0;
+      //setting message to release
+      TX_Message[0] = 'R';
+      TX_Message[1] = 4;
+      TX_Message[2] = prevKey;
     }
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);

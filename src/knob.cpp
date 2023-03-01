@@ -1,4 +1,5 @@
-#include "..\include\knob.hh"
+#include "../include/knob.hh" //for mac users
+//#include "..\include\knob.hh" //for windows users (chumps)
 
 // constructor
 Knob::Knob()
