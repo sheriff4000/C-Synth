@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
-#include "..\include\knob.hh"
 #include <STM32FreeRTOS.h>
+#include "..\include\knob.hh"
 
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
@@ -172,7 +172,10 @@ void scanKeysTask(void *pvParameters)
       curStep = 0;
     }
 
+    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     knob3.update_rotation(keymatrix);
+    xSemaphoreGive(keyArrayMutex);
+
     __atomic_store_n(&currentStepSize, curStep, __ATOMIC_RELAXED);
   }
 }

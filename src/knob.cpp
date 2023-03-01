@@ -18,9 +18,7 @@ void Knob::update_rotation(uint8_t keymatrix)
 {
     // uint8_t current_rotation = get_rotation();
 
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     uint8_t current_rotation = rotation;
-    xSemaphoreGive(keyArrayMutex);
 
     if ((previous == 0 && keymatrix == 1) || (previous == 3 && keymatrix == 2) || (previous == 3 && keymatrix == 0) || (previous == 0 && keymatrix == 1))
     {
