@@ -52,7 +52,7 @@ volatile uint8_t note;
 Knob knob0, knob1, knob2, knob3;
 
 // CAN Stuff
-volatile uint8_t TX_Message[8] = {0};
+//volatile uint8_t TX_Message[8] = {0};
 
 // Function to set outputs using key matrix
 void setOutMuxBit(const uint8_t bitIdx, const bool value)
@@ -106,13 +106,24 @@ void updateDisplayTask(void *pvParameters)
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
+  //CAN Message Variables
+  uint32_t ID;
+  uint8_t RX_Message[8]={0};
+  Serial.println("started display task");
   // infinite loop for this task
   while (1)
   {
+    Serial.println("display task loop");
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-
+    Serial.println("after display delay");
+    //poll for received messages
+    while (CAN_CheckRXLevel()){
+      Serial.println("receiving message");
+      CAN_RX(ID, RX_Message);
+    }
+    Serial.println("after receiving message");
     for (int i = 0; i < 4; ++i)
-    {
+    { 
       setRow(i);
       delayMicroseconds(3);
       xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
@@ -132,11 +143,11 @@ void updateDisplayTask(void *pvParameters)
     u8g2.drawStr(2, 30, notes[note]);
     // direction of rotation
 
-    //displaying the transfer message
+    //displaying the received message
     u8g2.setCursor(66,30);
-    u8g2.print((char) TX_Message[0]);
-    u8g2.print(TX_Message[1]);
-    u8g2.print(TX_Message[2]);
+    u8g2.print((char) RX_Message[0]);
+    u8g2.print(RX_Message[1]);
+    u8g2.print(RX_Message[2]);
     u8g2.sendBuffer(); // transfer internal memory to the display
 
     // Toggle LED
@@ -148,15 +159,17 @@ void scanKeysTask(void *pvParameters)
 {
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
-
+  uint8_t TX_Message[8] = {0};
   uint8_t keymatrix, current_rotation;
+  uint8_t tmp_TX[8];
   uint32_t curStep;
   uint16_t toAnd, keys;
   int prevKey;
   bool pressed;
-
+  
   while (1)
   {
+    //Serial.println("scan keys loop");
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     // use mutex to access keyarray
@@ -190,12 +203,17 @@ void scanKeysTask(void *pvParameters)
       TX_Message[0] = 'R';
       TX_Message[1] = 4;
       TX_Message[2] = prevKey;
+
     }
+    
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    for(int i = 0; i < 8; i++){
+      tmp_TX[i] = TX_Message[i];
+    }
     knob3.update_rotation(keymatrix);
     xSemaphoreGive(keyArrayMutex);
-
+    CAN_TX(0x123, tmp_TX);
     __atomic_store_n(&currentStepSize, curStep, __ATOMIC_RELAXED);
   }
 }
@@ -232,6 +250,8 @@ void setup()
   Serial.begin(9600);
   Serial.println("Hello World");
 
+  
+
   TaskHandle_t scanKeysHandle = NULL;
   xTaskCreate(
       scanKeysTask,     /* Function that implements the task */
@@ -264,6 +284,10 @@ void setup()
   // setting knob 3 limits
   knob3.set_limits(0, 8);
 
+  //Initialise CAN
+  CAN_Init(true);
+  setCANFilter(0x123,0x7ff);
+  CAN_Start();  
   vTaskStartScheduler();
 }
 
