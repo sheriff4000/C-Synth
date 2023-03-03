@@ -10,6 +10,7 @@ public:
     Knob();
 
     uint8_t get_rotation();
+    uint8_t get_rotation_atomic();
 
     void update_rotation(uint8_t keymatrix);
 

@@ -5,6 +5,7 @@
 
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
+SemaphoreHandle_t sampleBufferSemaphore;
 
 // Pin definitions
 // Row select and enable
@@ -42,13 +43,20 @@ volatile uint8_t keyArray[7];
 const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 68133799, 72233540, 76528508, 81018701, 85899345, 90975216, 96441538};
 
 // volatile to allow for concurrency
-volatile uint32_t currentStepSize;
+volatile uint16_t g_note_states;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
 
 // Global knobs
 Knob knob0, knob1, knob2, knob3;
+
+// DMA
+// TODO work out the proper way of determining sample buffer size
+const int SAMPLE_BUFFER_SIZE = 100;
+uint8_t sampleBuffer0[SAMPLE_BUFFER_SIZE];
+uint8_t sampleBuffer1[SAMPLE_BUFFER_SIZE];
+volatile bool writeBuffer1 = false;
 
 // Function to set outputs using key matrix
 void setOutMuxBit(const uint8_t bitIdx, const bool value)
@@ -87,13 +95,47 @@ void setRow(uint8_t rowIdx)
 // Sample interrupt
 void sampleISR()
 {
-  static uint32_t phaseAcc = 0;
-  phaseAcc += currentStepSize;
+  static uint32_t readCtr = 0;
 
-  int32_t Vout = phaseAcc >> 24;
-  Vout = Vout >> (8 - knob3.get_rotation());
+  if (readCtr == SAMPLE_BUFFER_SIZE) {
+    readCtr = 0;
+    writeBuffer1 = !writeBuffer1;
+    xSemaphoreGiveFromISR(sampleBufferSemaphore, NULL);
+    }
+    
+  if (writeBuffer1)
+    analogWrite(OUTR_PIN, sampleBuffer0[readCtr++]);
+  else
+    analogWrite(OUTR_PIN, sampleBuffer1[readCtr++]);
+}
 
-  analogWrite(OUTR_PIN, Vout + 128);
+void sampleGenerationTask(void *pvParameters) {
+  // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
+  uint32_t phases[12] = {0};
+  while(1){
+    xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
+    for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++) {
+      // TODO check if g_note_states is ok to be accessed here
+      uint32_t toAnd = 1;
+      uint32_t ss = g_note_states;
+      uint32_t Vout = 0;
+
+      for (int i=0; i<12; ++i) {
+        if (ss & toAnd) {
+          phases[i] += stepSizes[i];
+          Vout += (phases[i] >> 24) - 128;
+        }
+        toAnd = toAnd << 1;
+      }
+
+      Vout = Vout >> (8 - knob3.get_rotation());
+
+      if (writeBuffer1)
+        sampleBuffer1[writeCtr] = Vout + 128;
+      else
+        sampleBuffer0[writeCtr] = Vout + 128;
+    }
+  }
 }
 
 void updateDisplayTask(void *pvParameters)
@@ -106,26 +148,18 @@ void updateDisplayTask(void *pvParameters)
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-
-    for (int i = 0; i < 4; ++i)
-    {
-      setRow(i);
-      delayMicroseconds(3);
-      xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-      keyArray[i] = readCols();
-      xSemaphoreGive(keyArrayMutex);
-    }
-
+    
     // Update display
     u8g2.clearBuffer();                 // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
     u8g2.setCursor(2, 20);
 
     // print volume
-    u8g2.print(knob3.get_rotation(), DEC);
+    u8g2.print(knob3.get_rotation_atomic(), DEC);
 
     // note showing
-    u8g2.drawStr(2, 30, notes[note]);
+    // u8g2.drawStr(2, 30, notes[note]);
+
     // direction of rotation
     u8g2.sendBuffer(); // transfer internal memory to the display
 
@@ -140,7 +174,6 @@ void scanKeysTask(void *pvParameters)
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   uint8_t keymatrix, current_rotation;
-  uint32_t curStep;
   uint16_t toAnd, keys;
   bool pressed;
 
@@ -150,40 +183,45 @@ void scanKeysTask(void *pvParameters)
 
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    for (int i = 0; i < 4; ++i)
+    {
+      setRow(i);
+      delayMicroseconds(3);
+      keyArray[i] = readCols();
+    }
+    xSemaphoreGive(keyArrayMutex);
+
+    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
     keymatrix = keyArray[3] & 0x03;
     xSemaphoreGive(keyArrayMutex);
 
-    toAnd = 1;
-    pressed = false;
+    // note_states represents a 12-bit state of all notes
+    uint16_t note_states = 0;
+    uint16_t toAnd = 1;
+    bool pressed = false;
+
     for (int i = 0; i < 12; ++i)
     {
       if (!((keys & toAnd) & 0xfff))
       {
         // note pressed
-        curStep = stepSizes[i];
+        note_states += toAnd;
         note = i;
         pressed = true;
       }
       toAnd = toAnd << 1;
     }
-    if (!pressed)
-    {
-      curStep = 0;
-    }
 
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    // TODO check if need to use mutex here
     knob3.update_rotation(keymatrix);
-    xSemaphoreGive(keyArrayMutex);
 
-    __atomic_store_n(&currentStepSize, curStep, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_note_states, note_states, __ATOMIC_RELAXED);
   }
 }
 
 void setup()
 {
-  // put your setup code here, to run once:
-
   // Set pin directions
   pinMode(RA0_PIN, OUTPUT);
   pinMode(RA1_PIN, OUTPUT);
@@ -212,6 +250,16 @@ void setup()
   Serial.begin(9600);
   Serial.println("Hello World");
 
+  // thread initialisation
+  TaskHandle_t sampleGenerationHandle = NULL;
+  xTaskCreate(
+      sampleGenerationTask,     /* Function that implements the task */
+      "sampleGeneration",       /* Text name for the task */
+      64,                    /* Stack size in words, not bytes */
+      NULL,                  /* Parameter passed into the task */
+      3,                     /* Task priority */
+      &sampleGenerationHandle); /* Pointer to store the task handle */
+
   TaskHandle_t scanKeysHandle = NULL;
   xTaskCreate(
       scanKeysTask,     /* Function that implements the task */
@@ -231,6 +279,8 @@ void setup()
       &updateDisplayHandle); /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
+  sampleBufferSemaphore = xSemaphoreCreateBinary();
+  xSemaphoreGive(sampleBufferSemaphore);
 
   // Timer
   TIM_TypeDef *Instance = TIM1;
