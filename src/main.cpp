@@ -107,15 +107,6 @@ void updateDisplayTask(void *pvParameters)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
-    for (int i = 0; i < 4; ++i)
-    {
-      setRow(i);
-      delayMicroseconds(3);
-      xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-      keyArray[i] = readCols();
-      xSemaphoreGive(keyArrayMutex);
-    }
-
     // Update display
     u8g2.clearBuffer();                 // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
@@ -147,6 +138,15 @@ void scanKeysTask(void *pvParameters)
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    for (int i = 0; i < 4; ++i)
+    {
+      setRow(i);
+      delayMicroseconds(3);
+      keyArray[i] = readCols();
+    }
+    xSemaphoreGive(keyArrayMutex);
 
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
