@@ -42,7 +42,7 @@ volatile uint8_t keyArray[7];
 const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 68133799, 72233540, 76528508, 81018701, 85899345, 90975216, 96441538};
 
 // volatile to allow for concurrency
-volatile uint16_t g_note_states[5];
+volatile uint16_t g_note_states;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
@@ -110,35 +110,19 @@ void sampleISR()
 
 void sampleGenerationTask(void *pvParameters) {
   // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
-  uint32_t phases[24] = {0};
-  uint32_t ss;
-  uint32_t toAnd;
+  uint32_t phases[12] = {0};
   while(1){
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++) {
       // TODO check if g_note_states is ok to be accessed here
-
-      //doing middle keyboard
-      toAnd = 1;
-      ss = g_note_states[2];
+      uint32_t toAnd = 1;
+      uint32_t ss = g_note_states;
       uint32_t Vout = 0;
 
       for (int i=0; i<12; ++i) {
         if (ss & toAnd) {
           phases[i] += stepSizes[i];
           Vout += (phases[i] >> 24) - 128;
-        }
-        toAnd = toAnd << 1;
-      }
-
-      //doing higher up keyboard
-      toAnd = 1;
-      ss = g_note_states[3];
-
-      for (int i=0; i<12; ++i) {
-        if (ss & toAnd) {
-          phases[i+12] += stepSizes[i]*2;
-          Vout += (phases[i+12] >> 24) - 128;
         }
         toAnd = toAnd << 1;
       }
@@ -170,17 +154,11 @@ void updateDisplayTask(void *pvParameters)
     while (CAN_CheckRXLevel()){
       CAN_RX(ID, RX_Message);
     }
-    g_note_states[3] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
     // Update display
     u8g2.clearBuffer();                 // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
     u8g2.setCursor(2, 20);
-
-    // print volume
-    u8g2.print(knob3.get_rotation_atomic(), DEC);
-    u8g2.setCursor(2, 30);
-    u8g2.print(g_note_states[3], BIN);
-
+    u8g2.print(g_note_states, BIN);
     // note showing
     // u8g2.drawStr(2, 30, notes[note]);
 
@@ -248,9 +226,7 @@ void scanKeysTask(void *pvParameters)
     // TODO check if need to use mutex here
     knob3.update_rotation(keymatrix);
 
-    // __atomic_store_n(&g_note_states[3], note_states, __ATOMIC_RELAXED);
-    g_note_states[2] = note_states;// need to protect this at some point!!
-    
+    __atomic_store_n(&g_note_states, note_states, __ATOMIC_RELAXED);
   }
 }
 
@@ -284,15 +260,6 @@ void setup()
   Serial.begin(9600);
   Serial.println("Hello World");
 
-  // thread initialisation
-  TaskHandle_t sampleGenerationHandle = NULL;
-  xTaskCreate(
-      sampleGenerationTask,     /* Function that implements the task */
-      "sampleGeneration",       /* Text name for the task */
-      64,                    /* Stack size in words, not bytes */
-      NULL,                  /* Parameter passed into the task */
-      3,                     /* Task priority */
-      &sampleGenerationHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanKeysHandle = NULL;
   xTaskCreate(
@@ -341,4 +308,3 @@ void setup()
 void loop()
 {
 }
-

@@ -1,4 +1,4 @@
-#include "..\include\knob.hh"
+#include "../include/knob.hh"
 
 // constructor
 Knob::Knob()
