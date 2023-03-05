@@ -153,24 +153,35 @@ void sampleGenerationTask(void *pvParameters) {
   }
 }
 
+void scanOtherBoardsTask(void *pvParameters){
+  //CAN Message Variables
+  uint32_t ID;
+  uint8_t RX_Message[8]={0};
+  
+  //Timing for the task
+  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  while(1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    while (CAN_CheckRXLevel()){
+      CAN_RX(ID, RX_Message);
+    }
+     g_note_states[3] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+  }
+
+}
 void updateDisplayTask(void *pvParameters)
 {
   // Timing for the task
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
-  //CAN Message Variables
-  uint32_t ID;
-  uint8_t RX_Message[8]={0};
-
   // infinite loop for this task
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    while (CAN_CheckRXLevel()){
-      CAN_RX(ID, RX_Message);
-    }
-    g_note_states[3] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+   
     // Update display
     u8g2.clearBuffer();                 // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
@@ -298,6 +309,15 @@ void setup()
   xTaskCreate(
       scanKeysTask,     /* Function that implements the task */
       "scanKeys",       /* Text name for the task */
+      64,               /* Stack size in words, not bytes */
+      NULL,             /* Parameter passed into the task */
+      2,                /* Task priority */
+      &scanKeysHandle); /* Pointer to store the task handle */
+  
+  TaskHandle_t scanOtherBoards = NULL;
+  xTaskCreate(
+      scanOtherBoardsTask,     /* Function that implements the task */
+      "scanOtherBoards",       /* Text name for the task */
       64,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
       2,                /* Task priority */
