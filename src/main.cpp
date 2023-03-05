@@ -118,17 +118,17 @@ void sampleGenerationTask(void *pvParameters) {
       // TODO check if g_note_states is ok to be accessed here
       uint32_t toAnd = 1;
       uint32_t ss = g_note_states;
-      uint32_t Vout = 0;
+      int32_t Vout = 0;
+      uint8_t volume = knob3.get_rotation();
 
       for (int i=0; i<12; ++i) {
         if (ss & toAnd) {
           phases[i] += stepSizes[i];
-          Vout += (phases[i] >> 24) - 128;
+          // TODO volume = 0 plays same sound as 1
+          Vout += ((phases[i] >> 24) - 128) >> (8 - volume);
         }
         toAnd = toAnd << 1;
       }
-
-      Vout = Vout >> (8 - knob3.get_rotation());
 
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
