@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
-#include "..\include\knob.hh"
+#include "../include/knob.hh"
+//#include <stdlib.h>
 
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
@@ -43,6 +44,9 @@ const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 
 
 // volatile to allow for concurrency
 volatile uint32_t currentStepSize;
+volatile uint32_t bendStep; // how much to change the step by based on joystick x
+volatile uint32_t vibStep;
+volatile uint32_t vibVout;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
@@ -74,6 +78,7 @@ uint8_t readCols()
   return (c3 << 3) + (c2 << 2) + (c1 << 1) + c0;
 }
 
+
 // Set row bits
 void setRow(uint8_t rowIdx)
 {
@@ -82,6 +87,25 @@ void setRow(uint8_t rowIdx)
   digitalWrite(RA1_PIN, rowIdx & 2);
   digitalWrite(RA2_PIN, rowIdx & 4);
   digitalWrite(REN_PIN, HIGH);
+}
+
+void setBendStep(void *pvParameters){
+  while(1){
+    bendStep = 2 * 8080 * (512 - analogRead(JOYX_PIN));
+  }
+}
+
+void setVibVoltage(void *pvParameters){
+  uint32_t vibRange;
+  int diff;
+  static uint32_t vibAcc = 0;
+  while(1){
+    diff = 512 - analogRead(JOYY_PIN);
+    vibAcc += (abs(diff) / 512) * 1366581;
+    vibVout = vibAcc >> 24;
+    vibVout = (vibVout >> (8 -knob3.get_rotation())) + 128;
+    vibVout *= 2;
+  }
 }
 
 // Sample interrupt
@@ -93,7 +117,7 @@ void sampleISR()
   int32_t Vout = phaseAcc >> 24;
   Vout = Vout >> (8 - knob3.get_rotation());
 
-  analogWrite(OUTR_PIN, Vout + 128);
+  analogWrite(OUTR_PIN, Vout + 128 + vibVout);
 }
 
 void updateDisplayTask(void *pvParameters)
@@ -107,7 +131,7 @@ void updateDisplayTask(void *pvParameters)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 8; ++i)
     {
       setRow(i);
       delayMicroseconds(3);
@@ -124,9 +148,15 @@ void updateDisplayTask(void *pvParameters)
     // print volume
     u8g2.print(knob3.get_rotation(), DEC);
 
+
     // note showing
     u8g2.drawStr(2, 30, notes[note]);
     // direction of rotation
+
+    // print joystick
+    u8g2.setCursor(2,10);
+    u8g2.print(analogRead(JOYY_PIN), DEC);
+
     u8g2.sendBuffer(); // transfer internal memory to the display
 
     // Toggle LED
@@ -140,7 +170,7 @@ void scanKeysTask(void *pvParameters)
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   uint8_t keymatrix, current_rotation;
-  uint32_t curStep;
+  uint32_t curStep, outStep;
   uint16_t toAnd, keys;
   bool pressed;
 
@@ -172,11 +202,18 @@ void scanKeysTask(void *pvParameters)
       curStep = 0;
     }
 
+    if (curStep != 0){
+      outStep = curStep+bendStep+vibStep;
+    }else{
+      outStep = curStep;
+    }
+
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     knob3.update_rotation(keymatrix);
     xSemaphoreGive(keyArrayMutex);
 
-    __atomic_store_n(&currentStepSize, curStep, __ATOMIC_RELAXED);
+
+    __atomic_store_n(&currentStepSize, outStep, __ATOMIC_RELAXED);
   }
 }
 
@@ -218,7 +255,7 @@ void setup()
       "scanKeys",       /* Text name for the task */
       64,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      2,                /* Task priority */
+      4,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -227,8 +264,27 @@ void setup()
       "updateDisplay",       /* Text name for the task */
       64,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      1,                     /* Task priority */
+      3,                     /* Task priority */
       &updateDisplayHandle); /* Pointer to store the task handle */
+  
+  TaskHandle_t pitchBend = NULL;
+  xTaskCreate(
+    setBendStep,
+    "setBendStep",
+    4,
+    NULL,
+    2,
+    &pitchBend
+  );
+  TaskHandle_t vibVolt = NULL;
+  xTaskCreate(
+    setVibVoltage,
+    "setVibVoltage",
+    4,
+    NULL,
+    1,
+    &vibVolt
+  );
 
   keyArrayMutex = xSemaphoreCreateMutex();
 
@@ -250,3 +306,10 @@ void setup()
 void loop()
 {
 }
+
+// TODO figure out which row corresponds to the joystick x and y,
+// understand the readings (col values)
+// find mapping between joystick value and level of pitch change,
+// write function to add an offset to currentStepSize
+// look into modulate/tremolo type thing for the other axis of joystick
+
