@@ -87,13 +87,93 @@ void setRow(uint8_t rowIdx)
 // Sample interrupt
 void sampleISR()
 {
-  static uint32_t phaseAcc = 0;
-  phaseAcc += currentStepSize;
+  static uint32_t phaseAcc0 = 0;
+  static uint32_t phaseAcc1 = 0;
+  static uint32_t phaseAcc2 = 0;
+  static uint32_t phaseAcc3 = 0;
+  uint8_t knob2rotation = knob2.get_rotation();
+  int32_t Vout;
+  uint32_t currentStep = __atomic_load_n(&currentStepSize, __ATOMIC_RELAXED);
+  float_t angle;
+  if (knob2rotation == 0)
+  {
+    phaseAcc0 += currentStep;
+    angle = (phaseAcc0 >> 30) * 3.14159;
+    Vout = sin(angle) * 512;
+  }
+  else if (knob2rotation == 1)
+  {
+    phaseAcc1 += currentStep;
+  }
+  else if (knob2rotation == 2)
+  {
+    phaseAcc2 += currentStep;
+    Vout = (phaseAcc2 >> 24) - 128;
+  }
+  else if (knob2rotation == 3)
+  {
+    phaseAcc3 += currentStep;
+    if (sin(phaseAcc3 * 3.14159 / 180) < 0)
+    {
+      Vout = -128;
+    }
+    else
+    {
+      Vout = 128;
+    }
+  }
 
-  int32_t Vout = phaseAcc >> 24;
   Vout = Vout >> (8 - knob3.get_rotation());
 
   analogWrite(OUTR_PIN, Vout + 128);
+}
+
+void drawWaveform(uint8_t knob2rotation)
+{
+  if (knob2rotation == 0)
+  {
+    // sine waveform
+    for (int i = 0; i < 40; i++)
+    {
+      float angle = i * 9;
+      int x = 10 + sin(angle * 3.14159 / 180) * 7;
+      u8g2.drawPixel(50 + i, x);
+      u8g2.drawStr(95, 10, "Sine");
+    }
+  }
+  else if (knob2rotation == 1)
+  {
+    // triangle waveform
+    u8g2.drawLine(50, 15, 60, 5);
+    u8g2.drawLine(60, 5, 70, 15);
+    u8g2.drawLine(70, 15, 80, 5);
+    u8g2.drawLine(80, 5, 90, 15);
+    u8g2.drawStr(90, 10, "Triangle");
+  }
+  else if (knob2rotation == 2)
+  {
+    // sawtooth waveform
+    u8g2.drawLine(50, 15, 60, 5);
+    u8g2.drawLine(60, 5, 60, 15);
+    u8g2.drawLine(60, 15, 70, 5);
+    u8g2.drawLine(70, 5, 70, 15);
+    u8g2.drawLine(70, 15, 80, 5);
+    u8g2.drawStr(90, 10, "Sawtooth");
+  }
+  else if (knob2rotation == 3)
+  {
+    // pulse (square) waveform
+    u8g2.drawLine(50, 15, 55, 15);
+    u8g2.drawLine(55, 15, 55, 5);
+    u8g2.drawLine(55, 5, 60, 5);
+    u8g2.drawLine(60, 5, 60, 15);
+    u8g2.drawLine(60, 15, 65, 15);
+    u8g2.drawLine(65, 15, 65, 5);
+    u8g2.drawLine(65, 5, 70, 5);
+    u8g2.drawLine(70, 5, 70, 15);
+    u8g2.drawLine(70, 15, 75, 15);
+    u8g2.drawStr(90, 10, "Pulse");
+  }
 }
 
 void updateDisplayTask(void *pvParameters)
@@ -102,21 +182,35 @@ void updateDisplayTask(void *pvParameters)
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
+  uint8_t knob2value;
+  uint8_t knob3value;
+
   // infinite loop for this task
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
-    // Update display
-    u8g2.clearBuffer();                 // clear the internal memory
-    u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-    u8g2.setCursor(2, 20);
+    knob3value = knob3.get_rotation();
+    knob2value = knob2.get_rotation();
 
-    // print volume
-    u8g2.print(knob3.get_rotation(), DEC);
+    // Update display
+    u8g2.clearBuffer();                   // clear the internal memory
+    u8g2.setFont(u8g2_font_profont10_tf); // choose a suitable font
+
+    // Knob 2 (waveform)
+    u8g2.drawStr(2, 10, "Waveform"); // write something to the internal memory
+    drawWaveform(knob2value);
+
+    // Knob 3 (volume)
+    u8g2.drawStr(2, 30, "Vol"); // write something to the internal memory
+    u8g2.setCursor(30, 30);
+    u8g2.print(knob3value, DEC);
+
+    // print volume (knob2)
 
     // note showing
-    u8g2.drawStr(2, 30, notes[note]);
+    u8g2.drawStr(90, 30, "Note"); // write something to the internal memory
+    u8g2.drawStr(120, 30, notes[note]);
     // direction of rotation
     u8g2.sendBuffer(); // transfer internal memory to the display
 
@@ -130,7 +224,7 @@ void scanKeysTask(void *pvParameters)
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
-  uint8_t keymatrix, current_rotation;
+  uint8_t keymatrix3, keymatrix2;
   uint32_t curStep;
   uint16_t toAnd, keys;
   bool pressed;
@@ -151,7 +245,10 @@ void scanKeysTask(void *pvParameters)
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
-    keymatrix = keyArray[3] & 0x03;
+    // knob3
+    keymatrix3 = keyArray[3] & 0x03;
+    // knob2keymatri
+    keymatrix2 = (keyArray[3] & 0x0C) >> 2;
     xSemaphoreGive(keyArrayMutex);
 
     toAnd = 1;
@@ -173,9 +270,9 @@ void scanKeysTask(void *pvParameters)
     }
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-    knob3.update_rotation(keymatrix);
+    knob3.update_rotation(keymatrix3);
+    knob2.update_rotation(keymatrix2);
     xSemaphoreGive(keyArrayMutex);
-
     __atomic_store_n(&currentStepSize, curStep, __ATOMIC_RELAXED);
   }
 }
@@ -243,7 +340,7 @@ void setup()
 
   // setting knob 3 limits
   knob3.set_limits(0, 8);
-
+  knob2.set_limits(0, 3);
   vTaskStartScheduler();
 }
 

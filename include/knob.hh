@@ -15,6 +15,7 @@ public:
 
     void set_limits(uint8_t bottom_limit, uint8_t top_limit);
 
+
 private:
     uint8_t rotation, max, min, previous;
 };
