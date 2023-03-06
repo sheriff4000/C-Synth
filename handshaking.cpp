@@ -34,14 +34,11 @@ const int DRST_BIT = 4;
 const int HKOW_BIT = 5;
 const int HKOE_BIT = 6;
 
+//queue to receive messages
+QueueHandle_t msgInQ;
 
-//handshaking variables
-volatile bool east;
-volatile bool west;
-
-//keyboard defining variables
-volatile int keyboardIndex;
-volatile int numberOfKeyboards;
+//figuring out which board index you are:
+int BOARD_NUMBER;
 
 // Display driver object
 U8G2_SSD1305_128X32_NONAME_F_HW_I2C u8g2(U8G2_R0);
@@ -161,6 +158,40 @@ void sampleGenerationTask(void *pvParameters) {
     }
   }
 }
+bool west;
+bool east;
+void handShake(){
+    west = false;
+    east = false;
+    const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    for(int j = 0; j < 10; j++){
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+        u8g2.clearBuffer();                 // clear the internal memory
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.setCursor(2, 20);
+        u8g2.print("hello");
+        u8g2.sendBuffer(); 
+        // choose a suitable fon
+        for (int i=0; i<7; i++) {
+        setRow(i);                     //Set row address
+        digitalWrite(OUT_PIN,1); //Set value to latch in DFF
+        digitalWrite(REN_PIN,1);          //Enable selected row
+        delayMicroseconds(3);             //Wait for column inputs to stabilise
+        keyArray[i] = readCols();         //Read column inputs
+        digitalWrite(REN_PIN,0);          //Disable selected row
+        }
+         
+
+        if(keyArray[5] & 0b100 == 0b100){
+            west = true;
+        }
+        if(keyArray[6] & 0b100 == 0b100){
+            east = true;
+        }
+    } 
+}
+
 
 void scanOtherBoardsTask(void *pvParameters){
   //CAN Message Variables
@@ -185,6 +216,7 @@ void updateDisplayTask(void *pvParameters)
   // Timing for the task
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
+
   // infinite loop for this task
   while (1)
   {
@@ -192,23 +224,19 @@ void updateDisplayTask(void *pvParameters)
    
     // Update display
     u8g2.clearBuffer();                 // clear the internal memory
-    u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
+    u8g2.setFont(u8g2_font_ncenB08_tr);
     u8g2.setCursor(2, 20);
-
-    // print volume
-    u8g2.print(knob3.get_rotation_atomic(), DEC);
-    //print east or west
-
-    u8g2.print(numberOfKeyboards, DEC);
-    u8g2.print(keyboardIndex, DEC);
-    
-
-
-
+    u8g2.print("hello");// choose a suitable font
     u8g2.setCursor(2, 30);
-    u8g2.print(g_note_states[3], BIN);
-    
-    
+    if(west){
+        u8g2.print("west! ");
+    }
+    if(east){
+        u8g2.print("east!");
+    }
+
+   
+
     // note showing
     // u8g2.drawStr(2, 30, notes[note]);
 
@@ -235,24 +263,13 @@ void scanKeysTask(void *pvParameters)
 
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 4; ++i)
     {
       setRow(i);
-      if(i==5||i==6){
-        digitalWrite(OUT_PIN,1);
-      }
-       //Set value to latch in DFF
-      digitalWrite(REN_PIN,1);          //Enable selected row
       delayMicroseconds(3);
       keyArray[i] = readCols();
-      digitalWrite(REN_PIN,0);
     }
-    west = !(keyArray[5] & 0b1000);
-    east = !(keyArray[6] & 0b1000);
     xSemaphoreGive(keyArrayMutex);
-
-    
-
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
@@ -293,77 +310,6 @@ void scanKeysTask(void *pvParameters)
   }
 }
 
-
-void handShake(){
-
-  uint32_t startup = millis();
-  uint32_t current = startup;
-  while (current < startup+3000)//for 4 seconds
-  {
-    current = millis();
-    // use mutex to access keyarray
-    for (int i = 0; i < 7; ++i)
-    {
-      setRow(i);
-      if(i==5||i==6){
-        digitalWrite(OUT_PIN,1);
-      }
-       //Set value to latch in DFF
-      digitalWrite(REN_PIN,1);          //Enable selected row
-      delayMicroseconds(3);
-      keyArray[i] = readCols();
-      digitalWrite(REN_PIN,0);
-    }
-    if(!(keyArray[5] & 0b1000)){
-      west = true;
-    }
-    if(!(keyArray[6] & 0b1000)){
-      east = true;
-    }
-  }
-  //transmit 1 if west and east. else transmit 0 or 2.
-  uint8_t TX_Message[8]={0};
-  if(west && east){
-    TX_Message[0] = 1;
-  }
-  else{
-    TX_Message[0] = 2;
-  }
-  CAN_TX(0x123, TX_Message);
-  CAN_TX(0x123, TX_Message);
-  if(west && east){
-    numberOfKeyboards = 3;
-    keyboardIndex = 1;
-    return;
-  }
-  //listen for a 1
-  uint32_t ID;
-  uint8_t RX_Message[8]={0};
-  int i = 0;
-  while (CAN_CheckRXLevel() && i < 10){
-    CAN_RX(ID, RX_Message);
-    if(RX_Message[0] == 1){
-      numberOfKeyboards = 3;
-      if(east){
-        keyboardIndex = 0;
-      }
-      else if(west){
-        keyboardIndex = 2;
-      }
-      return;
-    }
-    i++;
-  }
-  numberOfKeyboards = 2;
-  if(east){
-    keyboardIndex = 0;
-  }
-  else if(west){
-    keyboardIndex = 1;
-  }
-  return;
-}
-
 void setup()
 {
   // Set pin directions
@@ -394,7 +340,7 @@ void setup()
   Serial.begin(9600);
   Serial.println("Hello World");
 
-  // thread initialisation
+  thread initialisation
   TaskHandle_t sampleGenerationHandle = NULL;
   xTaskCreate(
       sampleGenerationTask,     /* Function that implements the task */
@@ -413,15 +359,14 @@ void setup()
       2,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
   
-  
-  TaskHandle_t scanOtherBoards = NULL;
-  xTaskCreate(
-      scanOtherBoardsTask,     /* Function that implements the task */
-      "scanOtherBoards",       /* Text name for the task */
-      64,               /* Stack size in words, not bytes */
-      NULL,             /* Parameter passed into the task */
-      2,                /* Task priority */
-      &scanKeysHandle); /* Pointer to store the task handle */
+//   TaskHandle_t scanOtherBoards = NULL;
+//   xTaskCreate(
+//       scanOtherBoardsTask,     /* Function that implements the task */
+//       "scanOtherBoards",       /* Text name for the task */
+//       64,               /* Stack size in words, not bytes */
+//       NULL,             /* Parameter passed into the task */
+//       2,                /* Task priority */
+//       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
   xTaskCreate(
@@ -448,16 +393,19 @@ void setup()
   // setting knob 3 limits
   knob3.set_limits(0, 8);
 
+  msgInQ = xQueueCreate(36,8);
   //Initialise CAN
   CAN_Init(false);
   setCANFilter(0x123,0x7ff);
   CAN_Start();  
-
-  handShake();
+  // Serial.println("doing");
+  // handShake();
+  // Serial.println("done");
   vTaskStartScheduler();
 }
 
 void loop()
 {
 }
+
 
