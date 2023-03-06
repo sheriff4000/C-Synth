@@ -45,8 +45,8 @@ const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 
 // volatile to allow for concurrency
 volatile uint32_t currentStepSize;
 volatile uint32_t bendStep; // how much to change the step by based on joystick x
-volatile uint32_t vibStep;
-volatile uint32_t vibVout;
+// volatile uint32_t vibStep;
+// volatile uint32_t vibVout;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
@@ -95,18 +95,18 @@ void setBendStep(void *pvParameters){
   }
 }
 
-void setVibVoltage(void *pvParameters){
-  uint32_t vibRange;
-  int diff;
-  static uint32_t vibAcc = 0;
-  while(1){
-    diff = 512 - analogRead(JOYY_PIN);
-    vibAcc += (abs(diff) / 512) * 1366581;
-    vibVout = vibAcc >> 24;
-    vibVout = (vibVout >> (8 -knob3.get_rotation())) + 128;
-    vibVout *= 2;
-  }
-}
+// void setVibVoltage(void *pvParameters){
+//   uint32_t vibRange;
+//   int diff;
+//   static uint32_t vibAcc = 0;
+//   while(1){
+//     diff = 512 - analogRead(JOYY_PIN);
+//     vibAcc += (abs(diff) / 512) * 1366581;
+//     vibVout = vibAcc >> 24;
+//     vibVout = (vibVout >> (8 -knob3.get_rotation())) + 128;
+//     vibVout *= 2;
+//   }
+// }
 
 // Sample interrupt
 void sampleISR()
@@ -117,7 +117,7 @@ void sampleISR()
   int32_t Vout = phaseAcc >> 24;
   Vout = Vout >> (8 - knob3.get_rotation());
 
-  analogWrite(OUTR_PIN, Vout + 128 + vibVout);
+  analogWrite(OUTR_PIN, Vout + 128);
 }
 
 void updateDisplayTask(void *pvParameters)
@@ -203,7 +203,7 @@ void scanKeysTask(void *pvParameters)
     }
 
     if (curStep != 0){
-      outStep = curStep+bendStep+vibStep;
+      outStep = curStep+bendStep;
     }else{
       outStep = curStep;
     }
@@ -275,15 +275,6 @@ void setup()
     NULL,
     2,
     &pitchBend
-  );
-  TaskHandle_t vibVolt = NULL;
-  xTaskCreate(
-    setVibVoltage,
-    "setVibVoltage",
-    4,
-    NULL,
-    1,
-    &vibVolt
   );
 
   keyArrayMutex = xSemaphoreCreateMutex();
