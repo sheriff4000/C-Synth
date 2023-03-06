@@ -40,8 +40,8 @@ volatile bool east;
 volatile bool west;
 
 //keyboard defining variables
-volatile int keyboardIndex;
-volatile int numberOfKeyboards;
+volatile int keyboardIndex = 0;
+volatile int numberOfKeyboards = 1;
 
 // Display driver object
 U8G2_SSD1305_128X32_NONAME_F_HW_I2C u8g2(U8G2_R0);
@@ -325,42 +325,47 @@ void handShake(){
   uint8_t TX_Message[8]={0};
   if(west && east){
     TX_Message[0] = 1;
-  }
-  else{
-    TX_Message[0] = 2;
-  }
-  CAN_TX(0x123, TX_Message);
-  CAN_TX(0x123, TX_Message);
-  if(west && east){
+    CAN_TX(0x123, TX_Message);
+    delay(500);
+    CAN_TX(0x123, TX_Message); // send msg again in case of startup error or something
     numberOfKeyboards = 3;
     keyboardIndex = 1;
     return;
   }
-  //listen for a 1
-  uint32_t ID;
-  uint8_t RX_Message[8]={0};
-  int i = 0;
-  while (CAN_CheckRXLevel() && i < 10){
-    CAN_RX(ID, RX_Message);
-    if(RX_Message[0] == 1){
-      numberOfKeyboards = 3;
-      if(east){
-        keyboardIndex = 0;
+  else{
+    //TX_Message[0] = 2;
+    uint8_t RX_Message[8]={0};
+    uint32_t ID;
+    uint32_t start = millis();
+    uint32_t current2 = start;
+
+    while (CAN_CheckRXLevel() || current2 < (start + 3000)){
+      current2 = millis();
+      if(CAN_CheckRXLevel()){
+        CAN_RX(ID, RX_Message);
       }
-      else if(west){
-        keyboardIndex = 2;
+      if(RX_Message[0] == 1){
+        numberOfKeyboards = 3;
+        if(east){
+          keyboardIndex = 0;
+        }
+        else if(west){
+          keyboardIndex = 2;
+        }
+        return;
       }
-      return;
     }
-    i++;
   }
+  if(east || west){
   numberOfKeyboards = 2;
-  if(east){
+    if(east){
     keyboardIndex = 0;
+    }
+    else if(west){
+      keyboardIndex = 1;
+    }
   }
-  else if(west){
-    keyboardIndex = 1;
-  }
+  
   return;
 }
 
