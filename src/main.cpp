@@ -40,8 +40,8 @@ volatile bool east;
 volatile bool west;
 
 //keyboard defining variables
-volatile int keyboardIndex = 0;
-volatile int numberOfKeyboards = 1;
+volatile int keyboardIndex;
+volatile int numberOfKeyboards;
 
 // Display driver object
 U8G2_SSD1305_128X32_NONAME_F_HW_I2C u8g2(U8G2_R0);
@@ -170,7 +170,7 @@ void scanOtherBoardsTask(void *pvParameters){
   //Timing for the task
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
-
+  g_note_states[3] = 0;
   while(1){
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
     while (CAN_CheckRXLevel()){
@@ -238,17 +238,11 @@ void scanKeysTask(void *pvParameters)
     for (int i = 0; i < 7; ++i)
     {
       setRow(i);
-      if(i==5||i==6){
-        digitalWrite(OUT_PIN,1);
-      }
-       //Set value to latch in DFF
       digitalWrite(REN_PIN,1);          //Enable selected row
       delayMicroseconds(3);
       keyArray[i] = readCols();
       digitalWrite(REN_PIN,0);
     }
-    west = !(keyArray[5] & 0b1000);
-    east = !(keyArray[6] & 0b1000);
     xSemaphoreGive(keyArrayMutex);
 
     
@@ -276,14 +270,16 @@ void scanKeysTask(void *pvParameters)
       toAnd = toAnd << 1;
     }
     int msg_states = note_states;
-    TX_Message[0] = 5;
+    TX_Message[0] = keyboardIndex;
     TX_Message[1] = msg_states & 0xf;
     msg_states = msg_states >> 4;
     TX_Message[2] = msg_states & 0xf;
     msg_states = msg_states >> 4;
     TX_Message[3] = msg_states & 0xf;
-    
-    CAN_TX(0x123, TX_Message);
+    if(numberOfKeyboards > 1){
+       CAN_TX(0x123, TX_Message);
+    }
+   
     // TODO check if need to use mutex here
     knob3.update_rotation(keymatrix);
 
@@ -332,18 +328,17 @@ void handShake(){
     keyboardIndex = 1;
     return;
   }
-  else{
-    //TX_Message[0] = 2;
-    uint8_t RX_Message[8]={0};
-    uint32_t ID;
-    uint32_t start = millis();
-    uint32_t current2 = start;
+  
+  //TX_Message[0] = 2;
+  uint8_t RX_Message[8]={0};
+  uint32_t ID;
+  uint32_t start = millis();
+  uint32_t current2 = start;
 
-    while (CAN_CheckRXLevel() || current2 < (start + 3000)){
-      current2 = millis();
-      if(CAN_CheckRXLevel()){
-        CAN_RX(ID, RX_Message);
-      }
+  while (current2 < (start + 3000)){
+    current2 = millis();
+    if(CAN_CheckRXLevel() > 0){
+      CAN_RX(ID, RX_Message);
       if(RX_Message[0] == 1){
         numberOfKeyboards = 3;
         if(east){
@@ -353,9 +348,11 @@ void handShake(){
           keyboardIndex = 2;
         }
         return;
-      }
     }
+    }
+    
   }
+  
   if(east || west){
   numberOfKeyboards = 2;
     if(east){
@@ -364,8 +361,11 @@ void handShake(){
     else if(west){
       keyboardIndex = 1;
     }
+    return;
   }
-  
+  Serial.println("got here yay");
+  numberOfKeyboards = 1;
+  keyboardIndex = 0;
   return;
 }
 
@@ -457,8 +457,8 @@ void setup()
   CAN_Init(false);
   setCANFilter(0x123,0x7ff);
   CAN_Start();  
-
   handShake();
+  Serial.println("finished handshaking");
   vTaskStartScheduler();
 }
 
