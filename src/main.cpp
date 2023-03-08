@@ -48,15 +48,19 @@ volatile uint16_t g_note_states;
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
 
+// bendy bendy
+volatile uint32_t bendStep;
+
 // Global knobs
 Knob knob0, knob1, knob2, knob3;
 
-// DMA
 // TODO work out the proper way of determining sample buffer size
 const int SAMPLE_BUFFER_SIZE = 100;
 uint8_t sampleBuffer0[SAMPLE_BUFFER_SIZE];
 uint8_t sampleBuffer1[SAMPLE_BUFFER_SIZE];
 volatile bool writeBuffer1 = false;
+
+// DMA: TODO
 
 // Function to set outputs using key matrix
 void setOutMuxBit(const uint8_t bitIdx, const bool value)
@@ -101,7 +105,7 @@ void sampleISR()
     readCtr = 0;
     writeBuffer1 = !writeBuffer1;
     xSemaphoreGiveFromISR(sampleBufferSemaphore, NULL);
-    }
+  }
     
   if (writeBuffer1)
     analogWrite(OUTR_PIN, sampleBuffer0[readCtr++]);
@@ -112,22 +116,31 @@ void sampleISR()
 void sampleGenerationTask(void *pvParameters) {
   // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
   uint32_t phases[12] = {0};
+  int count = 0;
+  
   while(1){
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++) {
       // TODO check if g_note_states is ok to be accessed here
-      uint32_t toAnd = 1;
-      uint32_t ss = g_note_states;
+      uint16_t ss = g_note_states;
       int32_t Vout = 0;
       uint8_t volume = knob3.get_rotation();
+      uint8_t no_pressed = 0;
 
       for (int i=0; i<12; ++i) {
-        if (ss & toAnd) {
-          phases[i] += stepSizes[i];
-          // TODO volume = 0 plays same sound as 1
-          Vout += ((phases[i] >> 24) - 128) >> (8 - volume);
+        if (ss & 1) {
+          phases[i] += stepSizes[i] + bendStep;
+          Vout += (phases[i] >> 24) - 128;
         }
-        toAnd = toAnd << 1;
+        ss = ss >> 1;
+      }
+
+      Vout = Vout >> (8 - volume);
+      
+      if (Vout > 127) {
+        Vout = 127;
+      } else if (Vout < -128) {
+        Vout = -128;
       }
 
       if (writeBuffer1)
@@ -135,6 +148,8 @@ void sampleGenerationTask(void *pvParameters) {
       else
         sampleBuffer0[writeCtr] = Vout + 128;
     }
+
+    ++count;
   }
 }
 
@@ -215,6 +230,9 @@ void scanKeysTask(void *pvParameters)
 
     // TODO check if need to use mutex here
     knob3.update_rotation(keymatrix);
+
+    // bendy
+    __atomic_store_n(&bendStep,  2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
     __atomic_store_n(&g_note_states, note_states, __ATOMIC_RELAXED);
   }
