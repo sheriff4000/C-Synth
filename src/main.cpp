@@ -98,8 +98,8 @@ void sampleISR()
   if (knob2rotation == 0)
   {
     phaseAcc0 += currentStep;
-    angle = (phaseAcc0 >> 30) * 3.14159;
-    Vout = sin(angle) * 512;
+    angle = ((float_t)phaseAcc0 / 4294967295) * 3.14159;
+    Vout = sin(angle) * 255 - 128;
   }
   else if (knob2rotation == 1)
   {
@@ -113,14 +113,8 @@ void sampleISR()
   else if (knob2rotation == 3)
   {
     phaseAcc3 += currentStep;
-    if (sin(phaseAcc3 * 3.14159 / 180) < 0)
-    {
-      Vout = -128;
-    }
-    else
-    {
-      Vout = 128;
-    }
+    // angle = ((float_t)phaseAcc3 / 4294967295) * 3.14159;
+    Vout = ((phaseAcc3 >> 31) & 1) ? 255 : -255;
   }
 
   Vout = Vout >> (8 - knob3.get_rotation());
