@@ -97,24 +97,27 @@ void sampleISR()
   float_t angle;
   if (knob2rotation == 0)
   {
+    // Sine waveform
     phaseAcc0 += currentStep;
     angle = ((float_t)phaseAcc0 / 4294967295) * 3.14159;
     Vout = sin(angle) * 255 - 128;
   }
   else if (knob2rotation == 1)
   {
+    // triangular waveform.
     phaseAcc1 += currentStep;
+    Vout = ((phaseAcc1 >> 31) & 1) ? -(phaseAcc2 >> 24) - 128 : (phaseAcc2 >> 24) - 128;
   }
   else if (knob2rotation == 2)
   {
+    // Sawtooth
     phaseAcc2 += currentStep;
     Vout = (phaseAcc2 >> 24) - 128;
   }
   else if (knob2rotation == 3)
-  {
+  { // Pulse waveform
     phaseAcc3 += currentStep;
-    // angle = ((float_t)phaseAcc3 / 4294967295) * 3.14159;
-    Vout = ((phaseAcc3 >> 31) & 1) ? 255 : -255;
+    Vout = ((phaseAcc3 >> 31) & 1) ? -255 : 255;
   }
 
   Vout = Vout >> (8 - knob3.get_rotation());
