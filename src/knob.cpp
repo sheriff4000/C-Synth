@@ -1,4 +1,4 @@
-#include "..\include\knob.hh"
+#include "../include/knob.hh"
 
 // constructor
 Knob::Knob()
@@ -11,32 +11,39 @@ Knob::Knob()
 
 uint8_t Knob::get_rotation()
 {
+    return rotation;
+}
+uint8_t Knob::get_rotation_atomic()
+{
     return __atomic_load_n(&rotation, __ATOMIC_RELAXED);
 }
 
 void Knob::update_rotation(uint8_t keymatrix)
 {
-    // uint8_t current_rotation = get_rotation();
+    uint8_t current_rotation = get_rotation_atomic();
 
-    uint8_t current_rotation = rotation;
+    // uint8_t current_rotation = rotation;
+    uint8_t add = 0;
 
     if ((previous == 0 && keymatrix == 1) || (previous == 3 && keymatrix == 2) || (previous == 3 && keymatrix == 0) || (previous == 0 && keymatrix == 1))
     {
         if (current_rotation < max)
         {
-            current_rotation += 1;
+            add = 1;
         }
     }
     else if ((previous == 1 && keymatrix == 0) || (previous == 2 && keymatrix == 3))
     {
         if (current_rotation > min)
         {
-            current_rotation -= 1;
+            add = -1;
         }
     }
     previous = keymatrix;
 
-    __atomic_store_n(&rotation, current_rotation, __ATOMIC_RELAXED);
+    if (add != 0) {
+        __atomic_store_n(&rotation, current_rotation + add, __ATOMIC_RELAXED);
+    }
 }
 
 void Knob::set_limits(uint8_t bottom_limit, uint8_t top_limit)
