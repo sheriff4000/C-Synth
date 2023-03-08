@@ -51,11 +51,11 @@ volatile uint8_t keyArray[7];
 const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 68133799, 72233540, 76528508, 81018701, 85899345, 90975216, 96441538};
 
 // volatile to allow for concurrency
-volatile uint16_t g_note_states[5];
+volatile uint16_t g_note_states[3];
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
-
+volatile uint32_t global_Vout;
 // Global knobs
 Knob knob0, knob1, knob2, knob3;
 
@@ -119,7 +119,10 @@ void sampleISR()
 
 void sampleGenerationTask(void *pvParameters) {
   // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
-  uint32_t phases[24] = {0};
+  global_Vout = 0;
+  uint32_t lower_phases[12] = {0};
+  uint32_t middle_phases[12] = {0};
+  uint32_t upper_phases[12] = {0};
   uint32_t ss;
   uint32_t toAnd;
   while(1){
@@ -129,30 +132,49 @@ void sampleGenerationTask(void *pvParameters) {
 
       //doing middle keyboard
       toAnd = 1;
-      ss = g_note_states[2];
-      uint32_t Vout = 0;
-
-      for (int i=0; i<12; ++i) {
+      ss = g_note_states[0];
+      uint32_t Vout = 0; 
+      if(keyboardIndex == 0){
+        for (int i=0; i<12; ++i) {
         if (ss & toAnd) {
-          phases[i] += stepSizes[i];
-          Vout += (phases[i] >> 24) - 128;
+            lower_phases[i] += stepSizes[i] / 2;
+            Vout += (lower_phases[i] >> 24) - 128;
+          }
+          toAnd = toAnd << 1;
         }
-        toAnd = toAnd << 1;
-      }
 
-      //doing higher up keyboard
-      toAnd = 1;
-      ss = g_note_states[3];
+        //doing higher up keyboard
+        toAnd = 1;
+        ss = g_note_states[1];
 
-      for (int i=0; i<12; ++i) {
-        if (ss & toAnd) {
-          phases[i+12] += stepSizes[i]*2;
-          Vout += (phases[i+12] >> 24) - 128;
+        for (int i=0; i<12; ++i) {
+          if (ss & toAnd) {
+            middle_phases[i] += stepSizes[i];
+            Vout += (middle_phases[i] >> 24) - 128;
+          }
+          toAnd = toAnd << 1;
         }
-        toAnd = toAnd << 1;
-      }
 
-      Vout = Vout >> (8 - knob3.get_rotation());
+        //doing higher up keyboard
+        // toAnd = 1;
+
+        // ss = g_note_states[2];
+
+        // for (int i=0; i<12; ++i) {
+        //   if (ss & toAnd) {
+        //     upper_phases[i] += stepSizes[i]*2;
+        //     Vout += (upper_phases[i] >> 24) - 128;
+        //   }  
+        //   toAnd = toAnd << 1;
+        // }
+
+        Vout = Vout >> (8 - knob3.get_rotation());
+        global_Vout = Vout;
+      }
+      else{
+        Vout = global_Vout;
+      }
+      
 
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
@@ -170,13 +192,19 @@ void scanOtherBoardsTask(void *pvParameters){
   //Timing for the task
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
-  g_note_states[3] = 0;
   while(1){
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
     while (CAN_CheckRXLevel()){
       CAN_RX(ID, RX_Message);
+      if(keyboardIndex == 0){
+      g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+      }
+      else{
+      g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf); // change this to global vout
+      }
     }
-     g_note_states[3] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+    
+     
   }
 
 }
@@ -206,7 +234,7 @@ void updateDisplayTask(void *pvParameters)
 
 
     u8g2.setCursor(2, 30);
-    u8g2.print(g_note_states[3], BIN);
+    u8g2.print(g_note_states[2], BIN);
     
     
     // note showing
@@ -284,7 +312,7 @@ void scanKeysTask(void *pvParameters)
     knob3.update_rotation(keymatrix);
 
     // __atomic_store_n(&g_note_states[3], note_states, __ATOMIC_RELAXED);
-    g_note_states[2] = note_states;// need to protect this at some point!!
+    g_note_states[0] = note_states;// need to protect this at some point!!
     
   }
 }
@@ -452,7 +480,9 @@ void setup()
 
   // setting knob 3 limits
   knob3.set_limits(0, 8);
-
+  g_note_states[0] = 0;
+  g_note_states[1] = 0;
+  g_note_states[2] = 0;
   //Initialise CAN
   CAN_Init(false);
   setCANFilter(0x123,0x7ff);
