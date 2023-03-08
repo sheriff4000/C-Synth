@@ -5,6 +5,7 @@
 #include <ES_CAN.h>
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
+SemaphoreHandle_t notesArrayMutex;
 SemaphoreHandle_t sampleBufferSemaphore;
 // Pin definitions
 // Row select and enable
@@ -34,7 +35,6 @@ const int DRST_BIT = 4;
 const int HKOW_BIT = 5;
 const int HKOE_BIT = 6;
 
-
 //handshaking variables
 volatile bool east;
 volatile bool west;
@@ -52,10 +52,15 @@ const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 
 
 // volatile to allow for concurrency
 volatile uint16_t g_note_states[3];
+volatile uint64_t g_ss;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
 volatile uint32_t global_Vout;
+
+// bendy bendy
+volatile uint32_t bendStep;
+
 // Global knobs
 Knob knob0, knob1, knob2, knob3;
 
@@ -123,52 +128,37 @@ void sampleGenerationTask(void *pvParameters) {
   uint32_t lower_phases[12] = {0};
   uint32_t middle_phases[12] = {0};
   uint32_t upper_phases[12] = {0};
-  uint32_t ss;
-  uint32_t toAnd;
+  uint64_t ss;
   while(1){
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++) {
       // TODO check if g_note_states is ok to be accessed here
 
-      //doing middle keyboard
-      toAnd = 1;
-      ss = g_note_states[0];
+      //doing lowe keyboard
+      ss = g_ss;
       uint32_t Vout = 0; 
+      uint8_t volume = knob3.get_rotation();
+
       if(keyboardIndex == 0){
         for (int i=0; i<12; ++i) {
-        if (ss & toAnd) {
-            lower_phases[i] += stepSizes[i] / 2;
-            Vout += (lower_phases[i] >> 24) - 128;
+          if (ss & 1) {
+            lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
+            Vout += ((lower_phases[i] >> 24) - 128) >> (8 - volume);
           }
-          toAnd = toAnd << 1;
+
+          if (ss & 0x1000) {
+            middle_phases[i] += stepSizes[i] + bendStep;
+            Vout += ((middle_phases[i] >> 24) - 128) >> (8 - volume);
+          }
+
+          if (ss & 0x1000000) {
+            upper_phases[i] += (stepSizes[i] << 1) + bendStep;
+            Vout += ((upper_phases[i] >> 24) - 128) >> (8 - volume);
+          }
+
+          ss = ss >> 1;
         }
 
-        //doing higher up keyboard
-        toAnd = 1;
-        ss = g_note_states[1];
-
-        for (int i=0; i<12; ++i) {
-          if (ss & toAnd) {
-            middle_phases[i] += stepSizes[i];
-            Vout += (middle_phases[i] >> 24) - 128;
-          }
-          toAnd = toAnd << 1;
-        }
-
-        //doing higher up keyboard
-        // toAnd = 1;
-
-        // ss = g_note_states[2];
-
-        // for (int i=0; i<12; ++i) {
-        //   if (ss & toAnd) {
-        //     upper_phases[i] += stepSizes[i]*2;
-        //     Vout += (upper_phases[i] >> 24) - 128;
-        //   }  
-        //   toAnd = toAnd << 1;
-        // }
-
-        Vout = Vout >> (8 - knob3.get_rotation());
         global_Vout = Vout;
       }
       else{
@@ -196,18 +186,18 @@ void scanOtherBoardsTask(void *pvParameters){
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
     while (CAN_CheckRXLevel()){
       CAN_RX(ID, RX_Message);
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
       if(keyboardIndex == 0){
-      g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
       }
       else{
-      g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf); // change this to global vout
+        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf)  << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf); // change this to global vout
       }
-    }
-    
-     
+      xSemaphoreGive(notesArrayMutex);
+    } 
   }
-
 }
+
 void updateDisplayTask(void *pvParameters)
 {
   // Timing for the task
@@ -234,8 +224,9 @@ void updateDisplayTask(void *pvParameters)
 
 
     u8g2.setCursor(2, 30);
-    u8g2.print(g_note_states[2], BIN);
-    
+    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+    u8g2.print(g_ss, HEX);
+    xSemaphoreGive(notesArrayMutex);
     
     // note showing
     // u8g2.drawStr(2, 30, notes[note]);
@@ -273,9 +264,6 @@ void scanKeysTask(void *pvParameters)
     }
     xSemaphoreGive(keyArrayMutex);
 
-    
-
-
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
     keymatrix = keyArray[3] & 0x03;
@@ -311,9 +299,12 @@ void scanKeysTask(void *pvParameters)
     // TODO check if need to use mutex here
     knob3.update_rotation(keymatrix);
 
-    // __atomic_store_n(&g_note_states[3], note_states, __ATOMIC_RELAXED);
+    __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
+
+    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);    
     g_note_states[0] = note_states;// need to protect this at some point!!
-    
+    g_ss = (uint64_t)g_note_states[0] + ((uint64_t)g_note_states[1] << 12) + ((uint64_t)g_note_states[2] << 24);
+    xSemaphoreGive(notesArrayMutex);
   }
 }
 
@@ -432,9 +423,9 @@ void setup()
   xTaskCreate(
       sampleGenerationTask,     /* Function that implements the task */
       "sampleGeneration",       /* Text name for the task */
-      64,                    /* Stack size in words, not bytes */
+      128,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      3,                     /* Task priority */
+      4,                     /* Task priority */
       &sampleGenerationHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanKeysHandle = NULL;
@@ -443,7 +434,7 @@ void setup()
       "scanKeys",       /* Text name for the task */
       64,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      2,                /* Task priority */
+      3,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
   
   
@@ -466,6 +457,7 @@ void setup()
       &updateDisplayHandle); /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
+  notesArrayMutex = xSemaphoreCreateMutex();
   sampleBufferSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(sampleBufferSemaphore);
 
@@ -480,9 +472,7 @@ void setup()
 
   // setting knob 3 limits
   knob3.set_limits(0, 8);
-  g_note_states[0] = 0;
-  g_note_states[1] = 0;
-  g_note_states[2] = 0;
+
   //Initialise CAN
   CAN_Init(false);
   setCANFilter(0x123,0x7ff);
