@@ -1,13 +1,24 @@
-# ES-synth-starter
+# ES-synth Project
 
-  Use this project as the starting point for your Embedded Systems labs and coursework.
-  
-  [Lab Part 1](doc/LabPart1.md)
-  
-  [Lab Part 2](doc/LabPart2.md)
+Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones (arj120), Chris Myers (cm1220)
 
-## Additional Information
+## Advanced features 
 
-  [Handshaking and auto-detection](doc/handshaking.md)
-  
-  [Double buffering of audio samples](doc/doubleBuffer.md)
+1. Feature
+  - Description of feature functionality
+
+## Tasks (thread/interrupt)
+
+
+## Real time system analysis 
+
+### Critical analysis of rate monotonic scheduler
+ - show all deadlines are met under worst case conditions
+ 
+### Execution time
+
+### CPU utilisation
+
+### Shared data structures and methods used to guarantee safe access and synchronisation
+
+### Analysis of inter-task dependencies that show any possibility of deadlock
