@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
-#include "..\include\knob.hh"
+#include "../include/knob.hh"
 
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
@@ -44,6 +44,10 @@ const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 
 // volatile to allow for concurrency
 volatile uint32_t currentStepSize;
 
+//
+
+volatile float vibFactor;
+
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
 
@@ -84,13 +88,45 @@ void setRow(uint8_t rowIdx)
   digitalWrite(REN_PIN, HIGH);
 }
 
+void setVibFactor(void *pvParameters){
+  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  long int joyChange;
+  float abs_joyChange;
+  while(1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    joyChange = 512 - analogRead(JOYY_PIN);
+    abs_joyChange = (joyChange < 0) ? -1.0 * joyChange : joyChange;
+    vibFactor = (abs_joyChange)/512.0;
+    //Serial.println(vibFactor);
+  }
+  
+}
+
 // Sample interrupt
 void sampleISR()
 {
+  int32_t vibVout;
   static uint32_t phaseAcc = 0;
+  int32_t vibStepSize = 2049870; //1366580 * 2;
+  static uint32_t vibAcc = 0;
+  float_t angle;
+  
+
+
   phaseAcc += currentStepSize;
 
+  vibAcc += vibStepSize;
+  angle = ((float_t)vibAcc / 2147483647.5) * 3.14159;
+
+  //Serial.println(vibFactor);
+  
+  vibVout = (currentStepSize == 0) ? 0 : (sin(angle)* 255 - 128) * vibFactor;
+  //vibVout *= 1.6 * knob3.get_rotation() / 8;
+
   int32_t Vout = phaseAcc >> 24;
+  Vout += vibVout;
   Vout = Vout >> (8 - knob3.get_rotation());
 
   analogWrite(OUTR_PIN, Vout + 128);
@@ -218,7 +254,7 @@ void setup()
       "scanKeys",       /* Text name for the task */
       64,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      2,                /* Task priority */
+      3,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -229,6 +265,15 @@ void setup()
       NULL,                  /* Parameter passed into the task */
       1,                     /* Task priority */
       &updateDisplayHandle); /* Pointer to store the task handle */
+
+  TaskHandle_t setVibFact = NULL;
+  xTaskCreate(
+      setVibFactor,     /* Function that implements the task */
+      "setVibrato",       /* Text name for the task */
+      64,                    /* Stack size in words, not bytes */
+      NULL,                  /* Parameter passed into the task */
+      2,                     /* Task priority */
+      &setVibFact); /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
 
