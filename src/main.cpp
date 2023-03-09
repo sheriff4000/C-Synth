@@ -112,6 +112,8 @@ void sampleISR()
   int32_t vibStepSize = 2049870; //1366580 * 2;
   static uint32_t vibAcc = 0;
   float_t angle;
+  int32_t finalOut;
+  float cutoffVal;
   
 
 
@@ -126,8 +128,19 @@ void sampleISR()
   //vibVout *= 1.6 * knob3.get_rotation() / 8;
 
   int32_t Vout = phaseAcc >> 24;
-  Vout += vibVout;
+  //Vout = (Vout < 64) ? 64 : Vout;
+
+  //cutoff stuff
+  cutoffVal = 128 - knob0.get_rotation() * 20;
+  if (Vout > 128 + cutoffVal){
+    Vout = 128 + cutoffVal;
+  }else if (Vout < 128 - cutoffVal){
+    Vout = 128 - cutoffVal;
+  }
+
   Vout = Vout >> (8 - knob3.get_rotation());
+  //Vout += vibVout >> (8 - knob3.get_rotation());
+
 
   analogWrite(OUTR_PIN, Vout + 128);
 }
@@ -151,6 +164,10 @@ void updateDisplayTask(void *pvParameters)
     // print volume
     u8g2.print(knob3.get_rotation(), DEC);
 
+    //print cutoff level
+    u8g2.setCursor(12, 20);
+    u8g2.print(knob0.get_rotation(), DEC);
+
     // note showing
     u8g2.drawStr(2, 30, notes[note]);
     // direction of rotation
@@ -166,7 +183,7 @@ void scanKeysTask(void *pvParameters)
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
-  uint8_t keymatrix, current_rotation;
+  uint8_t keymatrix3, current_rotation, keymatrix0;
   uint32_t curStep;
   uint16_t toAnd, keys;
   bool pressed;
@@ -176,7 +193,7 @@ void scanKeysTask(void *pvParameters)
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 5; ++i)
     {
       setRow(i);
       delayMicroseconds(3);
@@ -187,7 +204,8 @@ void scanKeysTask(void *pvParameters)
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
-    keymatrix = keyArray[3] & 0x03;
+    keymatrix3 = keyArray[3] & 0b0011;
+    keymatrix0 = keyArray[4] & 0b0011;
     xSemaphoreGive(keyArrayMutex);
 
     toAnd = 1;
@@ -209,7 +227,8 @@ void scanKeysTask(void *pvParameters)
     }
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-    knob3.update_rotation(keymatrix);
+    knob3.update_rotation(keymatrix3);
+    knob0.update_rotation(keymatrix0);
     xSemaphoreGive(keyArrayMutex);
 
     __atomic_store_n(&currentStepSize, curStep, __ATOMIC_RELAXED);
@@ -288,6 +307,7 @@ void setup()
 
   // setting knob 3 limits
   knob3.set_limits(0, 8);
+  knob0.set_limits(0, 5);
 
   vTaskStartScheduler();
 }
