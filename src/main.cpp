@@ -4,7 +4,6 @@
 #include "../include/knob.hh"
 #include <ES_CAN.h>
 
-
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
 SemaphoreHandle_t notesArrayMutex;
@@ -225,18 +224,28 @@ void updateDisplayTask(void *pvParameters)
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     // Update display
-    u8g2.clearBuffer();                 // clear the internal memory
-    u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-    u8g2.setCursor(2, 20);
+    u8g2.clearBuffer();                   // clear the internal memory
+    u8g2.setFont(u8g2_font_profont10_tf); // choose a suitable font
 
-    // print volume
-    u8g2.print(knob3.get_rotation_atomic(), DEC);
-    // print east or west
+    // only show main volume on first keyboard
+    if (!keyboardIndex)
+    {
+      // Knob 3 (volume)
+      u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
+      u8g2.setCursor(110, 10);
+      u8g2.print(knob3.get_rotation_atomic(), DEC);
+      // print east or west
+    }
 
+    u8g2.setCursor(10, 10);
     u8g2.print(numberOfKeyboards, DEC);
     u8g2.print(keyboardIndex, DEC);
 
-    u8g2.setCursor(2, 30);
+    // note showing
+    u8g2.drawStr(80, 30, "Note"); // write something to the internal memory
+    // u8g2.drawStr(120, 30, notes[note]);
+
+    u8g2.setCursor(105, 30);
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
     u8g2.print(g_ss, HEX);
     xSemaphoreGive(notesArrayMutex);
