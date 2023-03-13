@@ -524,23 +524,38 @@ void updateDisplayTask(void *pvParameters)
       u8g2.drawStr(5, 10, "Waveform"); // write something to the internal memory
       // drawWaveform(knob2.get_rotation_atomic());
       drawWaveform(knob2rotation);
+
+      // u8g2.setCursor(10, 10);
+      // u8g2.print(numberOfKeyboards, DEC);
+      // u8g2.print(keyboardIndex, DEC);
+
+      // note showing
+      u8g2.drawStr(80, 30, "Note"); // write something to the internal memory
+      // u8g2.drawStr(120, 30, notes[note]);
+
+      u8g2.setCursor(105, 30);
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+      u8g2.print(g_ss, HEX);
+      xSemaphoreGive(notesArrayMutex);
+
+      // note showing
+      // u8g2.drawStr(2, 30, notes[note]);
+    }else if(keyboardIndex == 1 || keyboardIndex == 2){
+      u8g2.drawStr(5,10,"VOL");
+      u8g2.drawStr(40,10,"VOL");
+      u8g2.drawStr(75,10,"VOL");
+      u8g2.drawStr(110,10,"VOL");
+      u8g2.setCursor(5,20);
+      u8g2.print(local_knob0.get_rotation_atomic(),DEC);
+      u8g2.setCursor(40,20);
+      u8g2.print(local_knob1.get_rotation_atomic(),DEC);
+      u8g2.setCursor(75,20);
+      u8g2.print(local_knob2.get_rotation_atomic(),DEC);
+      u8g2.setCursor(110,20);
+      u8g2.print(local_knob3.get_rotation_atomic(),DEC);
     }
 
-    // u8g2.setCursor(10, 10);
-    // u8g2.print(numberOfKeyboards, DEC);
-    // u8g2.print(keyboardIndex, DEC);
-
-    // note showing
-    u8g2.drawStr(80, 30, "Note"); // write something to the internal memory
-    // u8g2.drawStr(120, 30, notes[note]);
-
-    u8g2.setCursor(105, 30);
-    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    u8g2.print(g_ss, HEX);
-    xSemaphoreGive(notesArrayMutex);
-
-    // note showing
-    // u8g2.drawStr(2, 30, notes[note]);
+    
 
     // direction of rotation
     u8g2.sendBuffer(); // transfer internal memory to the display
