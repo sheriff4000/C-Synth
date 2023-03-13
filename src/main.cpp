@@ -62,7 +62,16 @@ volatile uint32_t global_Vout;
 volatile uint32_t bendStep;
 
 // Global knobs
-Knob knob0, knob1, knob2, knob3;
+Knob local_knob0, local_knob1, local_knob2, local_knob3;
+
+int global_knob0 = 0;
+int global_knob1 = 0;
+int global_knob2 = 0;
+int global_knob3 = 0;
+int global_knob4 = 0;
+int global_knob5 = 0;
+int global_knob6 = 0;
+int global_knob7 = 0;
 
 // DMA
 // TODO work out the proper way of determining sample buffer size
@@ -479,9 +488,16 @@ void setup()
   sampleTimer->attachInterrupt(sampleISR);
   sampleTimer->resume();
 
-  // setting knob 3 limits
+  // setting knob limits
+  knob0.set_limits(0, 8);
+  knob1.set_limits(0, 8);
+  knob2.set_limits(0, 8);
   knob3.set_limits(0, 8);
-
+  knob4.set_limits(0, 8);
+  knob5.set_limits(0, 8);
+  knob6.set_limits(0, 8);
+  knob7.set_limits(0, 8);
+   
   //Initialise CAN
   CAN_Init(false);
   setCANFilter(0x123,0x7ff);
