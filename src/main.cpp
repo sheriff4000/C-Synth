@@ -62,9 +62,22 @@ volatile uint32_t global_Vout;
 // bendy bendy
 volatile uint32_t bendStep;
 
-// Global knobs
-Knob knob0, knob1, knob2, knob3;
+// local knobs
+Knob local_knob0, local_knob1, local_knob2, local_knob3;
 
+//global knobs
+volatile int8_t global_knob0 = 0;
+volatile int8_t global_knob1 = 0;
+volatile int8_t global_knob2 = 0;
+volatile int8_t global_knob3 = 0;
+volatile int8_t global_knob4 = 0;
+volatile int8_t global_knob5 = 0;
+volatile int8_t global_knob6 = 0;
+volatile int8_t global_knob7 = 0;
+volatile int8_t global_knob8 = 0;
+volatile int8_t global_knob9 = 0;
+volatile int8_t global_knob10 = 0;
+volatile int8_t global_knob11 = 0;
 // DMA
 // TODO work out the proper way of determining sample buffer size
 const int SAMPLE_BUFFER_SIZE = 100;
@@ -252,8 +265,10 @@ void sampleGenerationTask(void *pvParameters)
       // doing lowe keyboard
       ss = g_ss;
       int32_t Vout = 0;
-      uint8_t volume = knob3.get_rotation();
-      uint8_t wave_type = knob2.get_rotation();
+      int8_t volume = global_knob3;
+      int8_t wave_type = global_knob2;
+      int8_t octave_shift = local_knob0.get_rotation();
+      bool pos_shift = (octave_shift > 0) ? true : false;
 
       if (keyboardIndex == 0)
       {
@@ -265,21 +280,21 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases0[i] += stepSizes[i] + bendStep;
+              middle_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
               angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
@@ -294,19 +309,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases1[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += (((lower_phases1[i] >> 31) & 1) ? -(lower_phases1[i] >> 24) - 128 : (lower_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases1[i] += stepSizes[i] + bendStep;
+              middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
               Vout += (((middle_phases1[i] >> 31) & 1) ? -(middle_phases1[i] >> 24) - 128 : (middle_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases1[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               Vout += (((upper_phases1[i] >> 31) & 1) ? -(upper_phases1[i] >> 24) - 128 : (upper_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
@@ -320,19 +335,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases2[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += ((lower_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases2[i] += stepSizes[i] + bendStep;
+              middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
               Vout += ((middle_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases2[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               Vout += ((upper_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
@@ -348,19 +363,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases3[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases3[i] += stepSizes[i] + bendStep;
+              middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
               Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases3[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
@@ -402,6 +417,25 @@ void scanOtherBoardsTask(void *pvParameters)
       if (keyboardIndex == 0)
       {
         g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+        int8_t tempknob0, tempknob1, tempknob2, tempknob3;
+        
+        tempknob0 = RX_Message[4];
+        tempknob1 = RX_Message[5];
+        tempknob2 = RX_Message[6];
+        tempknob3 = RX_Message[7];
+        
+        if(RX_Message[0] == 1){
+          global_knob4 = tempknob0;
+          global_knob5 = tempknob1;
+          global_knob6 = tempknob2;
+          global_knob7 = tempknob3;
+        }
+        else{
+          global_knob8 = tempknob0;
+          global_knob9 = tempknob1;
+          global_knob10 = tempknob2;
+          global_knob11 = tempknob3;          
+        }
       }
       else
       {
@@ -468,7 +502,7 @@ void updateDisplayTask(void *pvParameters)
   // infinite loop for this task
   while (1)
   {
-    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+   vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     // Update display
     u8g2.clearBuffer();                   // clear the internal memory
@@ -477,8 +511,8 @@ void updateDisplayTask(void *pvParameters)
     // only show main volume on first keyboard
     if (!keyboardIndex)
     {
-      uint8_t knob3rotation = knob3.get_rotation();
-      uint8_t knob2rotation = knob2.get_rotation();
+      uint8_t knob3rotation = global_knob3;
+      uint8_t knob2rotation = global_knob2;
 
       // Knob 3 (volume)
       u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
@@ -521,23 +555,13 @@ void scanKeysTask(void *pvParameters)
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
-  uint8_t keymatrix, knob2keymatrix, current_rotation;
+  uint8_t knob2keymatrix, knob3keymatrix, knob1keymatrix, knob0keymatrix;
   uint16_t toAnd, keys;
   bool pressed;
   uint8_t TX_Message[8] = {0};
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
-    for (int i = 0; i < 4; ++i)
-    {
-      setRow(i);
-      delayMicroseconds(3);
-      keyArray[i] = readCols();
-    }
-    xSemaphoreGive(keyArrayMutex);
-
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     for (int i = 0; i < 7; ++i)
@@ -552,11 +576,22 @@ void scanKeysTask(void *pvParameters)
 
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
-    // knob3 keymatrix
-    keymatrix = keyArray[3] & 0x03;
-    // knob2 keymatrix
+
+
+    //knob key matrices
+    knob3keymatrix = keyArray[3] & 0x03;
     knob2keymatrix = (keyArray[3] & 0x0C) >> 2;
+    knob1keymatrix = keyArray[4] & 0x03;
+    knob0keymatrix = (keyArray[4] & 0x0C) >> 2;
     xSemaphoreGive(keyArrayMutex);
+    local_knob3.update_rotation(knob3keymatrix);
+    global_knob3 = local_knob3.get_rotation_atomic();
+    local_knob2.update_rotation(knob2keymatrix);
+    global_knob2 = local_knob2.get_rotation_atomic();
+    local_knob1.update_rotation(knob1keymatrix);
+    global_knob1 = local_knob1.get_rotation_atomic();
+    local_knob0.update_rotation(knob0keymatrix);
+    global_knob0 = local_knob0.get_rotation_atomic();
 
     // note_states represents a 12-bit state of all notes
     uint16_t note_states = 0;
@@ -581,14 +616,22 @@ void scanKeysTask(void *pvParameters)
     TX_Message[2] = msg_states & 0xf;
     msg_states = msg_states >> 4;
     TX_Message[3] = msg_states & 0xf;
+    uint8_t temp_knob0, temp_knob1, temp_knob2, temp_knob3;
+    temp_knob0 = local_knob0.get_rotation_atomic();
+    temp_knob1 = local_knob1.get_rotation_atomic();
+    temp_knob2 = local_knob2.get_rotation_atomic();
+    temp_knob3 = local_knob3.get_rotation_atomic();
+    TX_Message[4] = temp_knob0 & 0xf;
+    TX_Message[5] = temp_knob1 & 0xf;
+    TX_Message[6] = temp_knob2 & 0xf;
+    TX_Message[7] = temp_knob3 & 0xf;
     if (numberOfKeyboards > 1)
     {
       CAN_TX(0x123, TX_Message);
     }
 
     // Put in mutex?
-    knob3.update_rotation(keymatrix);
-    knob2.update_rotation(knob2keymatrix);
+   
 
     __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
@@ -771,15 +814,22 @@ void setup()
   sampleTimer->attachInterrupt(sampleISR);
   sampleTimer->resume();
 
-  // setting knob 3 limits
-  knob3.set_limits(0, 8);
-  knob2.set_limits(0, 3);
 
   // Initialise CAN
   CAN_Init(false);
   setCANFilter(0x123, 0x7ff);
   CAN_Start();
   handShake();
+  // setting local knob limits
+  local_knob3.set_limits(0, 8);
+  local_knob2.set_limits(0, 8);
+  local_knob1.set_limits(0, 8);
+  if(keyboardIndex == 0){
+    local_knob0.set_limits(-3,3);
+  }else{
+    local_knob0.set_limits(0,8);
+  }
+  
   Serial.println("finished handshaking");
   vTaskStartScheduler();
 }
