@@ -267,21 +267,21 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases0[i] += (stepSizes[i] << octave_shift) + bendStep;
+              middle_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
               angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases0[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
@@ -296,19 +296,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += (((lower_phases1[i] >> 31) & 1) ? -(lower_phases1[i] >> 24) - 128 : (lower_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases1[i] += (stepSizes[i] << octave_shift) + bendStep;
+              middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
               Vout += (((middle_phases1[i] >> 31) & 1) ? -(middle_phases1[i] >> 24) - 128 : (middle_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases1[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
+              upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               Vout += (((upper_phases1[i] >> 31) & 1) ? -(upper_phases1[i] >> 24) - 128 : (upper_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
@@ -322,19 +322,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += ((lower_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases2[i] += (stepSizes[i] << octave_shift) + bendStep;
+              middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
               Vout += ((middle_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases2[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
+              upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               Vout += ((upper_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
@@ -350,19 +350,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases3[i] += (stepSizes[i] << octave_shift) + bendStep;
+              middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
               Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases3[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
               Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
