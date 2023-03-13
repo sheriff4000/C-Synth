@@ -192,11 +192,7 @@ void scanKeysTask(void *pvParameters)
   uint16_t toAnd, keys;
   bool pressed;
 
-  while (1)
-  {
-    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-
-    // use mutex to access keyarray
+  #ifdef TEST_SCANKEYS
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     for (int i = 0; i < 4; ++i)
     {
@@ -235,7 +231,54 @@ void scanKeysTask(void *pvParameters)
     __atomic_store_n(&bendStep,  2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
     __atomic_store_n(&g_note_states, note_states, __ATOMIC_RELAXED);
-  }
+  #else
+
+    while (1)
+    {
+      vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
+      // use mutex to access keyarray
+      xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+      for (int i = 0; i < 4; ++i)
+      {
+        setRow(i);
+        delayMicroseconds(3);
+        keyArray[i] = readCols();
+      }
+      xSemaphoreGive(keyArrayMutex);
+
+      xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+      keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
+      keymatrix = keyArray[3] & 0x03;
+      xSemaphoreGive(keyArrayMutex);
+
+      // note_states represents a 12-bit state of all notes
+      uint16_t note_states = 0;
+      uint16_t toAnd = 1;
+      bool pressed = false;
+
+      for (int i = 0; i < 12; ++i)
+      {
+        if (!((keys & toAnd) & 0xfff))
+        {
+          // note pressed
+          note_states += toAnd;
+          note = i;
+          pressed = true;
+        }
+        toAnd = toAnd << 1;
+      }
+
+      // TODO check if need to use mutex here
+      knob3.update_rotation(keymatrix);
+
+      // bendy
+      __atomic_store_n(&bendStep,  2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
+
+      __atomic_store_n(&g_note_states, note_states, __ATOMIC_RELAXED);
+    }
+
+  #endif
 }
 
 void setup()
@@ -270,31 +313,34 @@ void setup()
 
   // thread initialisation
   TaskHandle_t sampleGenerationHandle = NULL;
-  xTaskCreate(
-      sampleGenerationTask,     /* Function that implements the task */
-      "sampleGeneration",       /* Text name for the task */
-      64,                    /* Stack size in words, not bytes */
-      NULL,                  /* Parameter passed into the task */
-      3,                     /* Task priority */
-      &sampleGenerationHandle); /* Pointer to store the task handle */
 
-  TaskHandle_t scanKeysHandle = NULL;
-  xTaskCreate(
-      scanKeysTask,     /* Function that implements the task */
-      "scanKeys",       /* Text name for the task */
-      64,               /* Stack size in words, not bytes */
-      NULL,             /* Parameter passed into the task */
-      2,                /* Task priority */
-      &scanKeysHandle); /* Pointer to store the task handle */
+  #ifndef DISABLE_THREADS
+    xTaskCreate(
+        sampleGenerationTask,     /* Function that implements the task */
+        "sampleGeneration",       /* Text name for the task */
+        64,                    /* Stack size in words, not bytes */
+        NULL,                  /* Parameter passed into the task */
+        3,                     /* Task priority */
+        &sampleGenerationHandle); /* Pointer to store the task handle */
 
-  TaskHandle_t updateDisplayHandle = NULL;
-  xTaskCreate(
-      updateDisplayTask,     /* Function that implements the task */
-      "updateDisplay",       /* Text name for the task */
-      64,                    /* Stack size in words, not bytes */
-      NULL,                  /* Parameter passed into the task */
-      1,                     /* Task priority */
-      &updateDisplayHandle); /* Pointer to store the task handle */
+    TaskHandle_t scanKeysHandle = NULL;
+    xTaskCreate(
+        scanKeysTask,     /* Function that implements the task */
+        "scanKeys",       /* Text name for the task */
+        64,               /* Stack size in words, not bytes */
+        NULL,             /* Parameter passed into the task */
+        2,                /* Task priority */
+        &scanKeysHandle); /* Pointer to store the task handle */
+
+    TaskHandle_t updateDisplayHandle = NULL;
+    xTaskCreate(
+        updateDisplayTask,     /* Function that implements the task */
+        "updateDisplay",       /* Text name for the task */
+        64,                    /* Stack size in words, not bytes */
+        NULL,                  /* Parameter passed into the task */
+        1,                     /* Task priority */
+        &updateDisplayHandle); /* Pointer to store the task handle */
+    #endif
 
   keyArrayMutex = xSemaphoreCreateMutex();
   sampleBufferSemaphore = xSemaphoreCreateBinary();
@@ -306,7 +352,11 @@ void setup()
 
   // Interrupt to execute the note playing
   sampleTimer->setOverflow(22000, HERTZ_FORMAT);
-  sampleTimer->attachInterrupt(sampleISR);
+
+  #ifndef DISABLE_ISRS
+    sampleTimer->attachInterrupt(sampleISR);
+  #endif
+
   sampleTimer->resume();
 
   // setting knob 3 limits
