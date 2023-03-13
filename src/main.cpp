@@ -3,6 +3,7 @@
 #include <STM32FreeRTOS.h>
 #include "../include/knob.hh"
 #include <ES_CAN.h>
+#include <thread>
 
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
@@ -58,6 +59,9 @@ volatile uint64_t g_ss;
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
 volatile uint32_t global_Vout;
+
+//envylopey
+volatile float noteMult[12] = {1.};
 
 // bendy bendy
 volatile uint32_t bendStep;
@@ -118,16 +122,74 @@ void sampleISR()
     xSemaphoreGiveFromISR(sampleBufferSemaphore, NULL);
   }
 
-  if (writeBuffer1)
+  if (writeBuffer1){
     analogWrite(OUTR_PIN, sampleBuffer0[readCtr++]);
-  else
+  }else{
+    
     analogWrite(OUTR_PIN, sampleBuffer1[readCtr++]);
+  }
+}
+
+void keyPressExecution(uint8_t note) {
+  uint32_t attack = 500;
+  uint32_t decay = 500;
+  float sustain = 0.75;
+  uint32_t release = 500;
+  int Vout = global_Vout;
+  float voutMult = 1;
+  int startTime = millis();
+  int currentTime = startTime;
+
+  //attack
+  while(currentTime < startTime + attack){
+    if (g_ss & (1 << note) == 0) break;
+    currentTime = millis();
+    voutMult = (float)(currentTime-startTime) / (float)attack;
+    noteMult[note] = voutMult;
+    //global_Vout = Vout * voutMult;
+    //Serial.println(voutMult);
+
+  }
+  startTime = millis();
+  currentTime = startTime;
+  //decay
+  while(currentTime < startTime + decay){
+    if (g_ss & (1 << note) == 0) break;
+    currentTime = millis();
+    voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
+    noteMult[note] = voutMult;
+    //global_Vout = Vout * voutMult;
+    //Serial.println(voutMult);
+  }
+  voutMult = sustain;
+  noteMult[note] = voutMult;
+  //sustain
+  while (g_ss & (1 << note) == 0){
+
+  }
+  startTime = millis();
+  currentTime = startTime;
+  //release
+  while(currentTime < startTime + release){
+    if (g_ss & (1 << note) == 0) break;
+    currentTime = millis();
+    voutMult = sustain - ((float)(currentTime-startTime) / (float)release);
+    if(voutMult < 0){
+      voutMult = 0;
+      noteMult[note] = voutMult;
+      break;
+    }
+    noteMult[note] = voutMult;
+    
+    //Serial.println(voutMult);
+  }
+
 }
 
 void sampleGenerationTask(void *pvParameters)
 {
   // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
-  global_Vout = 0;
+  //global_Vout = 0;
   uint32_t lower_phases[12] = {0};
   uint32_t middle_phases[12] = {0};
   uint32_t upper_phases[12] = {0};
@@ -142,10 +204,12 @@ void sampleGenerationTask(void *pvParameters)
       // doing lowe keyboard
       ss = g_ss;
       uint32_t Vout = 0;
+      //global_Vout = 0;
       uint8_t volume = knob3.get_rotation();
-
+      
       if (keyboardIndex == 0)
       {
+        //Serial.println(keyboardIndex);
         for (int i = 0; i < 12; ++i)
         {
           if (ss & 1)
@@ -182,62 +246,6 @@ void sampleGenerationTask(void *pvParameters)
         sampleBuffer0[writeCtr] = Vout + 128;
     }
   }
-}
-
-void keyPressExecution(uint64_t keyPressed) {
-  uint32_t attack = 500;
-  uint32_t decay = 500;
-  float sustain = 0.75;
-  uint32_t release = 500;
-  int Vout = global_Vout;
-  float voutMult = 1;
-  int startTime = millis();
-  int currentTime = startTime;
-
-  //attack
-  while(currentTime < startTime + attack){
-    if (keyPressed & g_ss == 0) break;
-    currentTime = millis();
-    voutMult = (float)(currentTime-startTime) / (float)attack;
-    
-    global_Vout = Vout * voutMult;
-    //Serial.println(voutMult);
-
-  }
-  startTime = millis();
-  currentTime = startTime;
-  //decay
-  while(currentTime < startTime + decay){
-    if (keyPressed & g_ss == 0) break;
-    currentTime = millis();
-    voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
-    global_Vout = Vout * voutMult;
-    //Serial.println(voutMult);
-  }
-  voutMult = sustain;
-  //sustain
-  while (keyPressed & g_ss != 0){
-    //don't change voltage
-    global_Vout = Vout * voutMult;
-    //Serial.println(voutMult);
-  }
-  startTime = millis();
-  currentTime = startTime;
-  //release
-  while(currentTime < startTime + release){
-    if (keyPressed & g_ss == 0) break;
-    currentTime = millis();
-    voutMult = sustain - ((float)(currentTime-startTime) / (float)release);
-    if(voutMult < 0){
-      voutMult = 0;
-      global_Vout = 0;
-      break;
-    }
-    global_Vout = Vout * voutMult;
-    
-    //Serial.println(voutMult);
-  }
-
 }
 
 void scanOtherBoardsTask(void *pvParameters)
@@ -367,6 +375,7 @@ void scanKeysTask(void *pvParameters)
       {
         // note pressed
         note_states += toAnd;
+        keyPressExecution(note_states & toAnd);
         note = i;
         pressed = true;
       }
