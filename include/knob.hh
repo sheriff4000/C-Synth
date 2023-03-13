@@ -9,15 +9,15 @@ class Knob
 public:
     Knob();
 
-    uint8_t get_rotation();
-    uint8_t get_rotation_atomic();
+    int8_t get_rotation();
+    int8_t get_rotation_atomic();
 
     void update_rotation(uint8_t keymatrix);
 
-    void set_limits(uint8_t bottom_limit, uint8_t top_limit);
+    void set_limits(int8_t bottom_limit, int8_t top_limit);
 
 private:
-    uint8_t rotation, max, min, previous;
+    int8_t rotation, max, min, previous;
 };
 
 #endif
