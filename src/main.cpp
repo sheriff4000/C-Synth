@@ -562,6 +562,7 @@ void scanKeysTask(void *pvParameters)
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     for (int i = 0; i < 7; ++i)
