@@ -184,6 +184,62 @@ void sampleGenerationTask(void *pvParameters)
   }
 }
 
+void keyPressExecution(uint64_t keyPressed) {
+  uint32_t attack = 500;
+  uint32_t decay = 500;
+  float sustain = 0.75;
+  uint32_t release = 500;
+  int Vout = global_Vout;
+  float voutMult = 1;
+  int startTime = millis();
+  int currentTime = startTime;
+
+  //attack
+  while(currentTime < startTime + attack){
+    if (keyPressed & g_ss == 0) break;
+    currentTime = millis();
+    voutMult = (float)(currentTime-startTime) / (float)attack;
+    
+    global_Vout = Vout * voutMult;
+    //Serial.println(voutMult);
+
+  }
+  startTime = millis();
+  currentTime = startTime;
+  //decay
+  while(currentTime < startTime + decay){
+    if (keyPressed & g_ss == 0) break;
+    currentTime = millis();
+    voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
+    global_Vout = Vout * voutMult;
+    //Serial.println(voutMult);
+  }
+  voutMult = sustain;
+  //sustain
+  while (keyPressed & g_ss != 0){
+    //don't change voltage
+    global_Vout = Vout * voutMult;
+    //Serial.println(voutMult);
+  }
+  startTime = millis();
+  currentTime = startTime;
+  //release
+  while(currentTime < startTime + release){
+    if (keyPressed & g_ss == 0) break;
+    currentTime = millis();
+    voutMult = sustain - ((float)(currentTime-startTime) / (float)release);
+    if(voutMult < 0){
+      voutMult = 0;
+      global_Vout = 0;
+      break;
+    }
+    global_Vout = Vout * voutMult;
+    
+    //Serial.println(voutMult);
+  }
+
+}
+
 void scanOtherBoardsTask(void *pvParameters)
 {
   // CAN Message Variables
