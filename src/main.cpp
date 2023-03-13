@@ -255,41 +255,40 @@ void sampleGenerationTask(void *pvParameters)
       uint8_t volume = knob3.get_rotation();
       uint8_t wave_type = knob2.get_rotation();
 
-      if (wave_type == 0)
+      if (keyboardIndex == 0)
       {
-        // sine wave
-        float_t angle;
-        for (int i = 0; i < 12; ++i)
+        if (wave_type == 0)
         {
-          if (ss & 1)
+          // sine wave
+          float_t angle;
+          for (int i = 0; i < 12; ++i)
           {
-            lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
-            angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
-            Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-          }
+            if (ss & 1)
+            {
+              lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
+              angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
+              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
+            }
 
-          if (ss & 0x1000)
-          {
-            middle_phases0[i] += stepSizes[i] + bendStep;
-            angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
-            Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-          }
+            if (ss & 0x1000)
+            {
+              middle_phases0[i] += stepSizes[i] + bendStep;
+              angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
+              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
+            }
 
-          if (ss & 0x1000000)
-          {
-            upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
-            angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
-            Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-          }
+            if (ss & 0x1000000)
+            {
+              upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
+              angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
+              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
+            }
 
-          ss = ss >> 1;
+            ss = ss >> 1;
+          }
         }
-      }
 
-      else if (keyboardIndex == 0)
-      {
-
-        if (wave_type == 1)
+        else if (wave_type == 1)
         {
           for (int i = 0; i < 12; ++i)
           {
@@ -314,8 +313,9 @@ void sampleGenerationTask(void *pvParameters)
             ss = ss >> 1;
           }
         }
-        if (wave_type == 2)
+        else if (wave_type == 2)
         {
+          // sawtooth
           for (int i = 0; i < 12; ++i)
           {
             if (ss & 1)
@@ -340,7 +340,7 @@ void sampleGenerationTask(void *pvParameters)
           }
         }
 
-        if (wave_type == 3)
+        else if (wave_type == 3)
         {
           // pulse wave
 
