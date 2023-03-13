@@ -124,99 +124,99 @@ void sampleISR()
     analogWrite(OUTR_PIN, sampleBuffer1[readCtr++]);
 }
 
-uint32_t generateVout(int32_t &Vout, uint8_t &wave_type, uint64_t &ss, uint8_t &volume)
-{
-  uint32_t lower_phases[12] = {0};
-  uint32_t middle_phases[12] = {0};
-  uint32_t upper_phases[12] = {0};
+// uint32_t generateVout(int32_t &Vout, uint8_t &wave_type, uint64_t &ss, uint8_t &volume)
+// {
+//   uint32_t lower_phases[12] = {0};
+//   uint32_t middle_phases[12] = {0};
+//   uint32_t upper_phases[12] = {0};
 
-  if (wave_type == 0)
-  {
-    // // sine wave
-    // for (int i = 0; i < 12; ++i)
-    // {
-    //   if (ss & 1)
-    //   {
-    //     lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
-    //     angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
-    //     Vout = sin(angle) * 255 - 128;
-    //     Vout >>= (8 - volume);
-    //   }
+//   if (wave_type == 0)
+//   {
+//     // // sine wave
+//     // for (int i = 0; i < 12; ++i)
+//     // {
+//     //   if (ss & 1)
+//     //   {
+//     //     lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
+//     //     angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
+//     //     Vout = sin(angle) * 255 - 128;
+//     //     Vout >>= (8 - volume);
+//     //   }
 
-    //   if (ss & 0x1000)
-    //   {
-    //     middle_phases0[i] += stepSizes[i] + bendStep;
-    //     angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
-    //     Vout = sin(angle) * 255 - 128;
-    //     Vout >>= (8 - volume);
-    //   }
+//     //   if (ss & 0x1000)
+//     //   {
+//     //     middle_phases0[i] += stepSizes[i] + bendStep;
+//     //     angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
+//     //     Vout = sin(angle) * 255 - 128;
+//     //     Vout >>= (8 - volume);
+//     //   }
 
-    //   if (ss & 0x1000000)
-    //   {
-    //     upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
-    //     angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
-    //     Vout = sin(angle) * 255 - 128;
-    //     Vout >>= (8 - volume);
-    //   }
+//     //   if (ss & 0x1000000)
+//     //   {
+//     //     upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
+//     //     angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
+//     //     Vout = sin(angle) * 255 - 128;
+//     //     Vout >>= (8 - volume);
+//     //   }
 
-    //   ss = ss >> 1;
-    // }
-  }
-  else if (wave_type == 1)
-  {
-    for (int i = 0; i < 12; ++i)
-    {
-      if (ss & 1)
-      {
-        lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
-        Vout += (((lower_phases[i] >> 31) & 1) ? -(lower_phases[i] >> 24) - 128 : (lower_phases[i] >> 24) - 128) >> (8 - volume);
-      }
+//     //   ss = ss >> 1;
+//     // }
+//   }
+//   else if (wave_type == 1)
+//   {
+//     for (int i = 0; i < 12; ++i)
+//     {
+//       if (ss & 1)
+//       {
+//         lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
+//         Vout += (((lower_phases[i] >> 31) & 1) ? -(lower_phases[i] >> 24) - 128 : (lower_phases[i] >> 24) - 128) >> (8 - volume);
+//       }
 
-      if (ss & 0x1000)
-      {
-        middle_phases[i] += stepSizes[i] + bendStep;
-        Vout += (((middle_phases[i] >> 31) & 1) ? -(middle_phases[i] >> 24) - 128 : (middle_phases[i] >> 24) - 128) >> (8 - volume);
-      }
+//       if (ss & 0x1000)
+//       {
+//         middle_phases[i] += stepSizes[i] + bendStep;
+//         Vout += (((middle_phases[i] >> 31) & 1) ? -(middle_phases[i] >> 24) - 128 : (middle_phases[i] >> 24) - 128) >> (8 - volume);
+//       }
 
-      if (ss & 0x1000000)
-      {
-        upper_phases[i] += (stepSizes[i] << 1) + bendStep;
-        Vout += (((upper_phases[i] >> 31) & 1) ? -(upper_phases[i] >> 24) - 128 : (upper_phases[i] >> 24) - 128) >> (8 - volume);
-      }
+//       if (ss & 0x1000000)
+//       {
+//         upper_phases[i] += (stepSizes[i] << 1) + bendStep;
+//         Vout += (((upper_phases[i] >> 31) & 1) ? -(upper_phases[i] >> 24) - 128 : (upper_phases[i] >> 24) - 128) >> (8 - volume);
+//       }
 
-      ss = ss >> 1;
-    }
-  }
-  else if (wave_type == 2)
-  {
-    for (int i = 0; i < 12; ++i)
-    {
-      if (ss & 1)
-      {
-        lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
-        Vout += ((lower_phases[i] >> 24) - 128) >> (8 - volume);
-      }
+//       ss = ss >> 1;
+//     }
+//   }
+//   else if (wave_type == 2)
+//   {
+//     for (int i = 0; i < 12; ++i)
+//     {
+//       if (ss & 1)
+//       {
+//         lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
+//         Vout += ((lower_phases[i] >> 24) - 128) >> (8 - volume);
+//       }
 
-      if (ss & 0x1000)
-      {
-        middle_phases[i] += stepSizes[i] + bendStep;
-        Vout += ((middle_phases[i] >> 24) - 128) >> (8 - volume);
-      }
+//       if (ss & 0x1000)
+//       {
+//         middle_phases[i] += stepSizes[i] + bendStep;
+//         Vout += ((middle_phases[i] >> 24) - 128) >> (8 - volume);
+//       }
 
-      if (ss & 0x1000000)
-      {
-        upper_phases[i] += (stepSizes[i] << 1) + bendStep;
-        Vout += ((upper_phases[i] >> 24) - 128) >> (8 - volume);
-      }
+//       if (ss & 0x1000000)
+//       {
+//         upper_phases[i] += (stepSizes[i] << 1) + bendStep;
+//         Vout += ((upper_phases[i] >> 24) - 128) >> (8 - volume);
+//       }
 
-      ss = ss >> 1;
-    }
-  }
-  else if (wave_type == 3)
-  {
-  }
-  return Vout;
-}
+//       ss = ss >> 1;
+//     }
+//   }
+//   else if (wave_type == 3)
+//   {
+//   }
+//   return Vout;
+// }
 
 void sampleGenerationTask(void *pvParameters)
 {
@@ -254,6 +254,8 @@ void sampleGenerationTask(void *pvParameters)
       int32_t Vout = 0;
       uint8_t volume = knob3.get_rotation();
       uint8_t wave_type = knob2.get_rotation();
+      int8_t octave_shift = knob0.get_rotation();
+      bool pos_shift = (octave_shift > 0) ? true : false;
 
       if (keyboardIndex == 0)
       {
@@ -265,21 +267,21 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases0[i] += stepSizes[i] + bendStep;
+              middle_phases0[i] += (stepSizes[i] << octave_shift) + bendStep;
               angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases0[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
               angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
               Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
             }
@@ -294,19 +296,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases1[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += (((lower_phases1[i] >> 31) & 1) ? -(lower_phases1[i] >> 24) - 128 : (lower_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases1[i] += stepSizes[i] + bendStep;
+              middle_phases1[i] += (stepSizes[i] << octave_shift) + bendStep;
               Vout += (((middle_phases1[i] >> 31) & 1) ? -(middle_phases1[i] >> 24) - 128 : (middle_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases1[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases1[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
               Vout += (((upper_phases1[i] >> 31) & 1) ? -(upper_phases1[i] >> 24) - 128 : (upper_phases1[i] >> 24) - 128) >> (8 - volume);
             }
 
@@ -320,19 +322,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases2[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += ((lower_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases2[i] += stepSizes[i] + bendStep;
+              middle_phases2[i] += (stepSizes[i] << octave_shift) + bendStep;
               Vout += ((middle_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases2[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases2[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
               Vout += ((upper_phases2[i] >> 24) - 128) >> (8 - volume);
             }
 
@@ -348,19 +350,19 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases3[i] += (stepSizes[i] >> 1) + bendStep;
+              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
               Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases3[i] += stepSizes[i] + bendStep;
+              middle_phases3[i] += (stepSizes[i] << octave_shift) + bendStep;
               Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases3[i] += (stepSizes[i] << 1) + bendStep;
+              upper_phases3[i] += (stepSizes[i] << (1 + octave_shift)) + bendStep;
               Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
             }
 
@@ -521,7 +523,7 @@ void scanKeysTask(void *pvParameters)
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
-  uint8_t keymatrix, knob2keymatrix, current_rotation;
+  uint8_t keymatrix, knob2keymatrix, knob1keymatrix, knob0keymatrix, current_rotation;
   uint16_t toAnd, keys;
   bool pressed;
   uint8_t TX_Message[8] = {0};
@@ -547,6 +549,8 @@ void scanKeysTask(void *pvParameters)
     keymatrix = keyArray[3] & 0x03;
     // knob2 keymatrix
     knob2keymatrix = (keyArray[3] & 0x0C) >> 2;
+    knob1keymatrix = (keyArray[4] & 0x03);
+    knob0keymatrix = (keyArray[4] & 0x0C) >> 2;
     xSemaphoreGive(keyArrayMutex);
 
     // note_states represents a 12-bit state of all notes
@@ -580,6 +584,8 @@ void scanKeysTask(void *pvParameters)
     // Put in mutex?
     knob3.update_rotation(keymatrix);
     knob2.update_rotation(knob2keymatrix);
+    knob1.update_rotation(knob1keymatrix);
+    knob0.update_rotation(knob0keymatrix);
 
     __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
@@ -762,9 +768,13 @@ void setup()
   sampleTimer->attachInterrupt(sampleISR);
   sampleTimer->resume();
 
-  // setting knob 3 limits
+  // knob limits
+  // volume set
   knob3.set_limits(0, 8);
+  // waveform set
   knob2.set_limits(0, 3);
+  // octave set
+  knob0.set_limits(-3, 3);
 
   // Initialise CAN
   CAN_Init(false);
