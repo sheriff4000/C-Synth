@@ -61,7 +61,7 @@ volatile uint8_t note;
 volatile uint32_t global_Vout;
 
 //envylopey
-volatile float noteMult[12] = {1.};
+volatile float noteMult[12] = {0.};
 volatile bool envActive[12] = {false};
 
 
@@ -141,12 +141,12 @@ void sampleISR()
 // }
 
 void keyPressExecution(void * pvParameters) {
-  Serial.println("entering/task stuff works");
+  //Serial.println("entering/task stuff works");
   uint8_t note = (int)pvParameters;
-  uint32_t attack = 500;
-  uint32_t decay = 500;
-  float sustain = 0.75;
-  uint32_t release = 500;
+  uint32_t attack = 1000;
+  uint32_t decay = 1000;
+  float sustain = 0.9;
+  uint32_t release = 1000;
   int Vout = global_Vout;
   float voutMult = 1;
   int startTime = millis();
@@ -177,19 +177,21 @@ void keyPressExecution(void * pvParameters) {
   }
   voutMult = sustain;
   noteMult[note] = voutMult;
-  //sustain
-  Serial.println(g_note_states[0]);
-  Serial.println(g_note_states[0] & (1 << note));
+  // //sustain
+  // Serial.println(g_note_states[0]);
+  // Serial.println(g_note_states[0] & (1 << note));
   while ((g_note_states[0] & (1 << note)) != 0){
-    Serial.println("sustaining");
+    //Serial.println("sustaining");
+    //Serial.println(voutMult);
   }
   startTime = millis();
   currentTime = startTime;
-  //envActive[note] = false;
+  envActive[note] = false;
   //release
   while(currentTime < startTime + release){
+    //Serial.println("releasing");
     currentTime = millis();
-    voutMult = sustain - ((float)(currentTime-startTime) / (float)release);
+    voutMult = sustain - sustain * ((float)(currentTime-startTime) / (float)release);
     if(voutMult < 0){
       voutMult = 0;
       noteMult[note] = voutMult;
@@ -199,7 +201,7 @@ void keyPressExecution(void * pvParameters) {
     
     //Serial.println(voutMult);
   }
-  Serial.println("ending task");
+  //Serial.println("ending task");
   vTaskDelete(NULL);
 }
 
@@ -208,7 +210,7 @@ void startEnvelopeTask(int note){
   xTaskCreate(
       keyPressExecution,     /* Function that implements the task */
       "enveloper",       /* Text name for the task */
-      64,                    /* Stack size in words, not bytes */
+      128,                    /* Stack size in words, not bytes */
       (void *)note,                  /* Parameter passed into the task */
       1,                     /* Task priority */
       &envelopeTask);        /* Pointer to store the task handle */
@@ -243,7 +245,8 @@ void sampleGenerationTask(void *pvParameters)
           if (ss & 1)
           {
             lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
-            Vout += ((lower_phases[i] >> 24) - 128) >> (8 - volume);
+            //Serial.println(noteMult[i]);
+            Vout += (uint32_t)((float)((lower_phases[i] >> 24) - 128) * (float)noteMult[i]) >> (8 - volume) ;
           }
 
           if (ss & 0x1000)
