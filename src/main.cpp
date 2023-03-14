@@ -62,6 +62,8 @@ volatile uint32_t global_Vout;
 
 //envylopey
 volatile float noteMult[12] = {1.};
+volatile bool envActive[12] = {false};
+
 
 // bendy bendy
 volatile uint32_t bendStep;
@@ -130,7 +132,17 @@ void sampleISR()
   }
 }
 
-void keyPressExecution(uint8_t note) {
+// void enveloper(){
+//   uint32_t attack = 500;
+//   uint32_t decay = 500;
+//   float sustain = 0.75;
+//   uint32_t release = 500;
+//   static int envStates[12];
+// }
+
+void keyPressExecution(void * pvParameters) {
+  Serial.println("entering/task stuff works");
+  uint8_t note = (int)pvParameters;
   uint32_t attack = 500;
   uint32_t decay = 500;
   float sustain = 0.75;
@@ -142,19 +154,21 @@ void keyPressExecution(uint8_t note) {
 
   //attack
   while(currentTime < startTime + attack){
-    if (g_ss & (1 << note) == 0) break;
+    if (g_note_states[0] & (1 << note) == 0) {
+      //Serial.println("breaking on attack");
+      break;
+    }
     currentTime = millis();
     voutMult = (float)(currentTime-startTime) / (float)attack;
     noteMult[note] = voutMult;
     //global_Vout = Vout * voutMult;
     //Serial.println(voutMult);
-
   }
   startTime = millis();
   currentTime = startTime;
   //decay
   while(currentTime < startTime + decay){
-    if (g_ss & (1 << note) == 0) break;
+    if (g_note_states[0] & (1 << note) == 0) break;
     currentTime = millis();
     voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
     noteMult[note] = voutMult;
@@ -164,14 +178,16 @@ void keyPressExecution(uint8_t note) {
   voutMult = sustain;
   noteMult[note] = voutMult;
   //sustain
-  while (g_ss & (1 << note) == 0){
-
+  Serial.println(g_note_states[0]);
+  Serial.println(g_note_states[0] & (1 << note));
+  while ((g_note_states[0] & (1 << note)) != 0){
+    Serial.println("sustaining");
   }
   startTime = millis();
   currentTime = startTime;
+  //envActive[note] = false;
   //release
   while(currentTime < startTime + release){
-    if (g_ss & (1 << note) == 0) break;
     currentTime = millis();
     voutMult = sustain - ((float)(currentTime-startTime) / (float)release);
     if(voutMult < 0){
@@ -183,7 +199,19 @@ void keyPressExecution(uint8_t note) {
     
     //Serial.println(voutMult);
   }
+  Serial.println("ending task");
+  vTaskDelete(NULL);
+}
 
+void startEnvelopeTask(int note){
+  TaskHandle_t envelopeTask = NULL;
+  xTaskCreate(
+      keyPressExecution,     /* Function that implements the task */
+      "enveloper",       /* Text name for the task */
+      64,                    /* Stack size in words, not bytes */
+      (void *)note,                  /* Parameter passed into the task */
+      1,                     /* Task priority */
+      &envelopeTask);        /* Pointer to store the task handle */
 }
 
 void sampleGenerationTask(void *pvParameters)
@@ -368,14 +396,18 @@ void scanKeysTask(void *pvParameters)
     uint16_t note_states = 0;
     uint16_t toAnd = 1;
     bool pressed = false;
-
+    
     for (int i = 0; i < 12; ++i)
     {
       if (!((keys & toAnd) & 0xfff))
       {
         // note pressed
         note_states += toAnd;
-        keyPressExecution(note_states & toAnd);
+        if (!envActive[i]){
+          envActive[i] = true;
+          startEnvelopeTask(i);
+        }
+        //Serial.println("envelope over?");
         note = i;
         pressed = true;
       }
