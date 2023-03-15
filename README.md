@@ -9,15 +9,18 @@ Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones 
 
 ## Tasks (thread/interrupt)
 
+### Task x
 
 ## Real time system analysis 
+
+### Characterisation of each task with minimum initiation interval and measured maximum execution time
 
 ### Critical analysis of rate monotonic scheduler
  - show all deadlines are met under worst case conditions
  
 ### Execution time
 
-### CPU utilisation
+### Total CPU utilisation
 
 ### Shared data structures and methods used to guarantee safe access and synchronisation
 
