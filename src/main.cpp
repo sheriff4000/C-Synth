@@ -439,7 +439,13 @@ void scanOtherBoardsTask(void *pvParameters)
       }
       else
       {
-        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf); // change this to global vout
+        uint32_t temp_Vout = 0;
+        temp_Vout += RX_Message[0];
+        temp_Vout += RX_Message[1] << 8;
+        temp_Vout += RX_Message[2] << 16;
+        temp_Vout += RX_Message[3] << 24;
+        global_Vout = temp_Vout;
+
       }
       xSemaphoreGive(notesArrayMutex);
     }
@@ -625,22 +631,33 @@ void scanKeysTask(void *pvParameters)
       }
       toAnd = toAnd << 1;
     }
-    int msg_states = note_states;
-    TX_Message[0] = keyboardIndex;
-    TX_Message[1] = msg_states & 0xf;
-    msg_states = msg_states >> 4;
-    TX_Message[2] = msg_states & 0xf;
-    msg_states = msg_states >> 4;
-    TX_Message[3] = msg_states & 0xf;
-    uint8_t temp_knob0, temp_knob1, temp_knob2, temp_knob3;
-    temp_knob0 = local_knob0.get_rotation_atomic();
-    temp_knob1 = local_knob1.get_rotation_atomic();
-    temp_knob2 = local_knob2.get_rotation_atomic();
-    temp_knob3 = local_knob3.get_rotation_atomic();
-    TX_Message[4] = temp_knob0 & 0xf;
-    TX_Message[5] = temp_knob1 & 0xf;
-    TX_Message[6] = temp_knob2 & 0xf;
-    TX_Message[7] = temp_knob3 & 0xf;
+    if(keyboardIndex != 0){
+      int msg_states = note_states;
+      TX_Message[0] = keyboardIndex;
+      TX_Message[1] = msg_states & 0xf;
+      msg_states = msg_states >> 4;
+      TX_Message[2] = msg_states & 0xf;
+      msg_states = msg_states >> 4;
+      TX_Message[3] = msg_states & 0xf;
+      uint8_t temp_knob0, temp_knob1, temp_knob2, temp_knob3;
+      temp_knob0 = local_knob0.get_rotation_atomic();
+      temp_knob1 = local_knob1.get_rotation_atomic();
+      temp_knob2 = local_knob2.get_rotation_atomic();
+      temp_knob3 = local_knob3.get_rotation_atomic();
+      TX_Message[4] = temp_knob0 & 0xf;
+      TX_Message[5] = temp_knob1 & 0xf;
+      TX_Message[6] = temp_knob2 & 0xf;
+      TX_Message[7] = temp_knob3 & 0xf;
+    }
+   
+
+    else{
+      uint32_t temp_Vout = global_Vout;
+      TX_Message[0] = global_Vout & 0xff;
+      TX_Message[1] = (global_Vout >> 8) & 0xff;
+      TX_Message[2] = (global_Vout >> 16) & 0xff;
+      TX_Message[3] = (global_Vout >> 24) & 0xff;
+    }
     if (numberOfKeyboards > 1)
     {
       CAN_TX(0x123, TX_Message);
