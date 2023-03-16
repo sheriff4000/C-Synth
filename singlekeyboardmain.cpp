@@ -255,9 +255,6 @@ void sampleGenerationTask(void *pvParameters)
   uint32_t middle_phases3[12] = {0};
   uint32_t upper_phases3[12] = {0};
   uint64_t ss;
-  uint8_t volume;
-  int pan;
-  int32_t Vout;
   while (1)
   {
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
@@ -267,151 +264,131 @@ void sampleGenerationTask(void *pvParameters)
 
       // doing lowe keyboard
       ss = g_ss;
-      Vout = 0;
-      volume = global_knob3;
-      // pan = int(global_knob4>>4);
-      // if(numberOfKeyboards ==2){
-      //   if(keyboardIndex == 0){
-          
-      //   }
-      //   else{
-      //     volume = min(volume, volume+pan);
-      //     volume = max(volume, 0);
-      //   }
-        
-      // }
-      // else if(numberOfKeyboards ==3){
-      //   if(keyboardIndex == 0){
-      //     volume -= pan;
-      //   }
-      //   else if(keyboardIndex ==1){
-      //     volume = volume >> 1;
-      //   }
-      //   else{
-      //     volume += pan;
-      //   }
-      // }
-      // volume = max(min_volume, volume);
-      // volume = min(max_volume,volume);
-      
+      int32_t Vout = 0;
+      int8_t volume = global_knob3;
       int8_t wave_type = global_knob2;
-      int8_t octave_shift = global_knob0;
+      int8_t octave_shift = local_knob0.get_rotation();
       bool pos_shift = (octave_shift > 0) ? true : false;
 
-  
-      
-      if (wave_type == 0)
+      if (keyboardIndex == 0)
       {
-        // sine wave
-        float_t angle;
-        for (int i = 0; i < 12; ++i)
+        if (wave_type == 0)
         {
-          if (ss & 1)
+          // sine wave
+          float_t angle;
+          for (int i = 0; i < 12; ++i)
           {
-            lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-            angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
-            Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-          }
+            if (ss & 1)
+            {
+              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
+              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
+            }
 
-          if (ss & 0x1000)
-          {
-            middle_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
-            angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
-            Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-          }
+            if (ss & 0x1000)
+            {
+              middle_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
+              angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
+              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
+            }
 
-          if (ss & 0x1000000)
-          {
-            upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-            angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
-            Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-          }
+            if (ss & 0x1000000)
+            {
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
+              angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
+              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
+            }
 
-          ss = ss >> 1;
+            ss = ss >> 1;
+          }
         }
-      }
 
-      else if (wave_type == 1)
+        else if (wave_type == 1)
+        {
+          for (int i = 0; i < 12; ++i)
+          {
+            if (ss & 1)
+            {
+              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              Vout += (((lower_phases1[i] >> 31) & 1) ? -(lower_phases1[i] >> 24) - 128 : (lower_phases1[i] >> 24) - 128) >> (8 - volume);
+            }
+
+            if (ss & 0x1000)
+            {
+              middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
+              Vout += (((middle_phases1[i] >> 31) & 1) ? -(middle_phases1[i] >> 24) - 128 : (middle_phases1[i] >> 24) - 128) >> (8 - volume);
+            }
+
+            if (ss & 0x1000000)
+            {
+              upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
+              Vout += (((upper_phases1[i] >> 31) & 1) ? -(upper_phases1[i] >> 24) - 128 : (upper_phases1[i] >> 24) - 128) >> (8 - volume);
+            }
+
+            ss = ss >> 1;
+          }
+        }
+        else if (wave_type == 2)
+        {
+          // sawtooth
+          for (int i = 0; i < 12; ++i)
+          {
+            if (ss & 1)
+            {
+              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              Vout += ((lower_phases2[i] >> 24) - 128) >> (8 - volume);
+            }
+
+            if (ss & 0x1000)
+            {
+              middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
+              Vout += ((middle_phases2[i] >> 24) - 128) >> (8 - volume);
+            }
+
+            if (ss & 0x1000000)
+            {
+              upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
+              Vout += ((upper_phases2[i] >> 24) - 128) >> (8 - volume);
+            }
+
+            ss = ss >> 1;
+          }
+        }
+
+        else if (wave_type == 3)
+        {
+          // pulse wave
+
+          for (int i = 0; i < 12; ++i)
+          {
+            if (ss & 1)
+            {
+              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
+            }
+
+            if (ss & 0x1000)
+            {
+              middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
+              Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
+            }
+
+            if (ss & 0x1000000)
+            {
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
+              Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
+            }
+
+            ss = ss >> 1;
+          }
+        }
+
+        global_Vout = Vout;
+      }
+      else
       {
-        for (int i = 0; i < 12; ++i)
-        {
-          if (ss & 1)
-          {
-            lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-            Vout += (((lower_phases1[i] >> 31) & 1) ? -(lower_phases1[i] >> 24) - 128 : (lower_phases1[i] >> 24) - 128) >> (8 - volume);
-          }
-
-          if (ss & 0x1000)
-          {
-            middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-            Vout += (((middle_phases1[i] >> 31) & 1) ? -(middle_phases1[i] >> 24) - 128 : (middle_phases1[i] >> 24) - 128) >> (8 - volume);
-          }
-
-          if (ss & 0x1000000)
-          {
-            upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-            Vout += (((upper_phases1[i] >> 31) & 1) ? -(upper_phases1[i] >> 24) - 128 : (upper_phases1[i] >> 24) - 128) >> (8 - volume);
-          }
-
-          ss = ss >> 1;
-        }
+        Vout = global_Vout;
       }
-      else if (wave_type == 2)
-      {
-        // sawtooth
-        for (int i = 0; i < 12; ++i)
-        {
-          if (ss & 1)
-          {
-            lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-            Vout += ((lower_phases2[i] >> 24) - 128) >> (8 - volume);
-          }
-
-          if (ss & 0x1000)
-          {
-            middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-            Vout += ((middle_phases2[i] >> 24) - 128) >> (8 - volume);
-          }
-
-          if (ss & 0x1000000)
-          {
-            upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-            Vout += ((upper_phases2[i] >> 24) - 128) >> (8 - volume);
-          }
-
-          ss = ss >> 1;
-        }
-      }
-
-      else if (wave_type == 3)
-      {
-        // pulse wave
-
-        for (int i = 0; i < 12; ++i)
-        {
-          if (ss & 1)
-          {
-            lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-            Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
-          }
-
-          if (ss & 0x1000)
-          {
-            middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-            Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
-          }
-
-          if (ss & 0x1000000)
-          {
-            upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-            Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
-          }
-
-          ss = ss >> 1;
-        }
-      }
-
-      
 
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
@@ -437,46 +414,38 @@ void scanOtherBoardsTask(void *pvParameters)
     {
       CAN_RX(ID, RX_Message);
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-     
-      g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
-      int8_t tempknob0, tempknob1, tempknob2, tempknob3;
-      
-      tempknob0 = RX_Message[4];
-      tempknob1 = RX_Message[5];
-      tempknob2 = RX_Message[6];
-      tempknob3 = RX_Message[7];
-      
-      if(RX_Message[0] == 0){
-        global_knob0 = tempknob0;
-        global_knob1 = tempknob1;
-        global_knob2 = tempknob2;
-        global_knob3 = tempknob3;
+      if (keyboardIndex == 0)
+      {
+        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+        int8_t tempknob0, tempknob1, tempknob2, tempknob3;
+        
+        tempknob0 = RX_Message[4];
+        tempknob1 = RX_Message[5];
+        tempknob2 = RX_Message[6];
+        tempknob3 = RX_Message[7];
+        
+        if(RX_Message[0] == 1){
+          global_knob4 = tempknob0;
+          global_knob5 = tempknob1;
+          global_knob6 = tempknob2;
+          global_knob7 = tempknob3;
+        }
+        else{
+          global_knob8 = tempknob0;
+          global_knob9 = tempknob1;
+          global_knob10 = tempknob2;
+          global_knob11 = tempknob3;          
+        }
       }
-      if(RX_Message[0] == 1){
-        global_knob4 = tempknob0;
-        global_knob5 = tempknob1;
-        global_knob6 = tempknob2;
-        global_knob7 = tempknob3;
+      else
+      {
+        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf); // change this to global vout
       }
-      else{
-        global_knob8 = tempknob0;
-        global_knob9 = tempknob1;
-        global_knob10 = tempknob2;
-        global_knob11 = tempknob3;          
-      }
-    
       xSemaphoreGive(notesArrayMutex);
     }
   }
 }
 
-void drawKnobLevel(int xCoordinate, uint8_t knob_value){
-  for(int i = 0; i < knob_value; i++){
-    u8g2.drawLine(xCoordinate, 30-2*i, xCoordinate+15, 30-2*i);
-    u8g2.drawLine(xCoordinate, 29-2*i, xCoordinate+15, 29-2*i);
-    drawKnobLevel(5, global_knob0);
-  }
-}
 void drawWaveform(uint8_t knob2rotation)
 {
   if (knob2rotation == 0)
@@ -540,17 +509,16 @@ void updateDisplayTask(void *pvParameters)
     u8g2.setFont(u8g2_font_profont10_tf); // choose a suitable font
 
     // only show main volume on first keyboard
-    if (keyboardIndex == 4)
+    if (!keyboardIndex)
     {
       uint8_t knob3rotation = global_knob3;
       uint8_t knob2rotation = global_knob2;
 
       // Knob 3 (volume)
       u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
-      u8g2.setCursor(100,10);
-      u8g2.print(global_knob3, DEC);
-      int pan = ((int)global_knob4) - 4;
-      u8g2.print(pan, DEC);
+      u8g2.setCursor(110, 10);
+      // u8g2.print(knob3.get_rotation_atomic(), DEC);
+      u8g2.print(knob3rotation, DEC);
 
       // Knob 2 (waveform)
       u8g2.drawStr(5, 10, "Waveform"); // write something to the internal memory
@@ -572,28 +540,23 @@ void updateDisplayTask(void *pvParameters)
 
       // note showing
       // u8g2.drawStr(2, 30, notes[note]);
-    }else if(keyboardIndex == 0 || keyboardIndex == 1 || keyboardIndex == 2){
+    }else if(keyboardIndex == 1 || keyboardIndex == 2){
       u8g2.drawStr(5,10,"VOL");
       u8g2.drawStr(40,10,"VOL");
       u8g2.drawStr(75,10,"VOL");
       u8g2.drawStr(110,10,"VOL");
-
-      drawKnobLevel(5, global_knob0);
-      drawKnobLevel(40, global_knob1);
-      drawKnobLevel(75, global_knob2);
-      drawKnobLevel(110, global_knob3);
-      // u8g2.setCursor(5,20);
-      // u8g2.print(local_knob0.get_rotation_atomic(),DEC);
-      // u8g2.setCursor(40,20);
-      // u8g2.print(local_knob1.get_rotation_atomic(),DEC);
-      // u8g2.setCursor(75,20);
-      // u8g2.print(local_knob2.get_rotation_atomic(),DEC);
-      // u8g2.setCursor(110,20);
-      // u8g2.print(local_knob3.get_rotation_atomic(),DEC);
+      u8g2.setCursor(5,20);
+      u8g2.print(local_knob0.get_rotation_atomic(),DEC);
+      u8g2.setCursor(40,20);
+      u8g2.print(local_knob1.get_rotation_atomic(),DEC);
+      u8g2.setCursor(75,20);
+      u8g2.print(local_knob2.get_rotation_atomic(),DEC);
+      u8g2.setCursor(110,20);
+      u8g2.print(local_knob3.get_rotation_atomic(),DEC);
     }
 
+    
 
-    u8g2.print(global_knob11, DEC);
     // direction of rotation
     u8g2.sendBuffer(); // transfer internal memory to the display
 
@@ -638,29 +601,13 @@ void scanKeysTask(void *pvParameters)
     knob0keymatrix = (keyArray[4] & 0x0C) >> 2;
     xSemaphoreGive(keyArrayMutex);
     local_knob3.update_rotation(knob3keymatrix);
+    global_knob3 = local_knob3.get_rotation_atomic();
     local_knob2.update_rotation(knob2keymatrix);
+    global_knob2 = local_knob2.get_rotation_atomic();
     local_knob1.update_rotation(knob1keymatrix);
+    global_knob1 = local_knob1.get_rotation_atomic();
     local_knob0.update_rotation(knob0keymatrix);
-    
-    if(keyboardIndex ==0){
-      global_knob0 = local_knob0.get_rotation_atomic();
-      global_knob1 = local_knob1.get_rotation_atomic();
-      global_knob2 = local_knob2.get_rotation_atomic();
-      global_knob3 = local_knob3.get_rotation_atomic();
-    }
-    else if(keyboardIndex ==0){
-      global_knob4 = local_knob0.get_rotation_atomic();
-      global_knob5 = local_knob1.get_rotation_atomic();
-      global_knob6 = local_knob2.get_rotation_atomic();
-      global_knob7 = local_knob3.get_rotation_atomic();
-    }
-    else{
-      global_knob8 = local_knob0.get_rotation_atomic();
-      global_knob9 = local_knob1.get_rotation_atomic();
-      global_knob10 = local_knob2.get_rotation_atomic();
-      global_knob11 = local_knob3.get_rotation_atomic();
-    }
-    
+    global_knob0 = local_knob0.get_rotation_atomic();
 
     // note_states represents a 12-bit state of all notes
     uint16_t note_states = 0;
@@ -705,7 +652,7 @@ void scanKeysTask(void *pvParameters)
     __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_states[keyboardIndex] = note_states; // need to protect this at some point!!
+    g_note_states[0] = note_states; // need to protect this at some point!!
     g_ss = (uint64_t)g_note_states[0] + ((uint64_t)g_note_states[1] << 12) + ((uint64_t)g_note_states[2] << 24);
     xSemaphoreGive(notesArrayMutex);
   }
