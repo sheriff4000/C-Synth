@@ -256,7 +256,7 @@ void sampleGenerationTask(void *pvParameters)
   uint32_t upper_phases3[12] = {0};
   uint64_t ss;
   uint8_t volume;
-  int pan;
+  float pan;
   int32_t Vout;
   while (1)
   {
@@ -269,6 +269,7 @@ void sampleGenerationTask(void *pvParameters)
       ss = g_ss;
       Vout = 0;
       volume = global_knob3;
+      pan = (float)global_knob4 / 8.0;
       // pan = int(global_knob4>>4);
       // if(numberOfKeyboards ==2){
       //   if(keyboardIndex == 0){
@@ -411,7 +412,22 @@ void sampleGenerationTask(void *pvParameters)
         }
       }
 
-      
+      if(numberOfKeyboards == 2){
+        if(keyboardIndex == 0){
+          Vout = Vout * (1-pan);
+        }
+        else{
+          Vout = Vout * pan;
+        }
+      }
+      if(numberOfKeyboards == 3){
+        if(keyboardIndex == 0){
+          Vout = Vout * (1-pan);
+        }
+        else if(keyboardIndex == 2){
+          Vout = Vout *pan;
+        }
+      }
 
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
@@ -540,7 +556,7 @@ void updateDisplayTask(void *pvParameters)
     u8g2.setFont(u8g2_font_profont10_tf); // choose a suitable font
 
     // only show main volume on first keyboard
-    if (keyboardIndex == 4)
+    if (keyboardIndex == 0)
     {
       uint8_t knob3rotation = global_knob3;
       uint8_t knob2rotation = global_knob2;
@@ -572,16 +588,25 @@ void updateDisplayTask(void *pvParameters)
 
       // note showing
       // u8g2.drawStr(2, 30, notes[note]);
-    }else if(keyboardIndex == 0 || keyboardIndex == 1 || keyboardIndex == 2){
+    }else if(keyboardIndex == 1 || keyboardIndex == 2){
       u8g2.drawStr(5,10,"VOL");
       u8g2.drawStr(40,10,"VOL");
       u8g2.drawStr(75,10,"VOL");
       u8g2.drawStr(110,10,"VOL");
-
-      drawKnobLevel(5, global_knob0);
-      drawKnobLevel(40, global_knob1);
-      drawKnobLevel(75, global_knob2);
-      drawKnobLevel(110, global_knob3);
+      if(keyboardIndex ==1){
+        drawKnobLevel(5, global_knob4);
+        drawKnobLevel(40, global_knob5);
+        drawKnobLevel(75, global_knob6);
+        drawKnobLevel(110, global_knob7);
+      }
+      else{
+        drawKnobLevel(5, global_knob8);
+        drawKnobLevel(40, global_knob9);
+        drawKnobLevel(75, global_knob10);
+        drawKnobLevel(110, global_knob11);
+      }
+      
+      
       // u8g2.setCursor(5,20);
       // u8g2.print(local_knob0.get_rotation_atomic(),DEC);
       // u8g2.setCursor(40,20);
@@ -648,7 +673,7 @@ void scanKeysTask(void *pvParameters)
       global_knob2 = local_knob2.get_rotation_atomic();
       global_knob3 = local_knob3.get_rotation_atomic();
     }
-    else if(keyboardIndex ==0){
+    else if(keyboardIndex ==1){
       global_knob4 = local_knob0.get_rotation_atomic();
       global_knob5 = local_knob1.get_rotation_atomic();
       global_knob6 = local_knob2.get_rotation_atomic();
