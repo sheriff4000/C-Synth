@@ -9,6 +9,7 @@
 SemaphoreHandle_t keyArrayMutex;
 SemaphoreHandle_t notesArrayMutex;
 SemaphoreHandle_t sampleBufferSemaphore;
+SemaphoreHandle_t noteMultiplierMutex;
 // Pin definitions
 // Row select and enable
 const int RA0_PIN = D3;
@@ -143,40 +144,52 @@ void sampleISR()
 void keyPressExecution(void * pvParameters) {
   //Serial.println("entering/task stuff works");
   uint8_t note = (int)pvParameters;
-  uint32_t attack = 1000;
-  uint32_t decay = 1000;
-  float sustain = 0.9;
-  uint32_t release = 1000;
+  uint32_t attack = 3000; // 100 * knobposition (0, 10)
+  uint32_t decay = 100; // 50 * knobposition (0, 10)
+  float sustain = 0.5; // knobposition (0, 10) / 10
+  uint32_t release = 500; // 100 * knobposition (0, 10)
   int Vout = global_Vout;
-  float voutMult = 1;
+  float voutMult = 0.0;
   int startTime = millis();
   int currentTime = startTime;
+  float atkDif;
+
+  noteMult[note] = voutMult;
 
   //attack
-  while(currentTime < startTime + attack){
-    if (g_note_states[0] & (1 << note) == 0) {
-      //Serial.println("breaking on attack");
-      break;
-    }
+  while((currentTime < startTime + attack) && ((g_note_states[0] & (1 << note)) != 0)){
+    //if (g_note_states[0] & (1 << note) == 0) break;
+    //Serial.println("attacking");
+    delay(50);
     currentTime = millis();
-    voutMult = (float)(currentTime-startTime) / (float)attack;
-    noteMult[note] = voutMult;
-    //global_Vout = Vout * voutMult;
-    //Serial.println(voutMult);
+    //voutMult = 0 + (float)(currentTime-startTime) / (float)attack;
+    if (currentTime > startTime + attack/10){
+      atkDif = ((float)(currentTime - startTime) / (float)attack);
+      voutMult = atkDif;
+      xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+      noteMult[note] = voutMult;
+      xSemaphoreGive(noteMultiplierMutex);
+    }
   }
+  xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+  noteMult[note] = 1;
+  xSemaphoreGive(noteMultiplierMutex);
   startTime = millis();
   currentTime = startTime;
   //decay
   while(currentTime < startTime + decay){
     if (g_note_states[0] & (1 << note) == 0) break;
+    //delay(50);
     currentTime = millis();
     voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
+    xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
     noteMult[note] = voutMult;
-    //global_Vout = Vout * voutMult;
-    //Serial.println(voutMult);
+    xSemaphoreGive(noteMultiplierMutex);
   }
   voutMult = sustain;
+  xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
   noteMult[note] = voutMult;
+  xSemaphoreGive(noteMultiplierMutex);
   // //sustain
   // Serial.println(g_note_states[0]);
   // Serial.println(g_note_states[0] & (1 << note));
@@ -188,16 +201,24 @@ void keyPressExecution(void * pvParameters) {
   currentTime = startTime;
   envActive[note] = false;
   //release
+  if((g_note_states[0] & (1 << note)) == 0){
+    g_note_states[0] += 1 << note;
+  }
   while(currentTime < startTime + release){
     //Serial.println("releasing");
+    delay(50);
     currentTime = millis();
     voutMult = sustain - sustain * ((float)(currentTime-startTime) / (float)release);
     if(voutMult < 0){
       voutMult = 0;
+      xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
       noteMult[note] = voutMult;
+      xSemaphoreGive(noteMultiplierMutex);
       break;
     }
+    xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
     noteMult[note] = voutMult;
+    xSemaphoreGive(noteMultiplierMutex);
     
     //Serial.println(voutMult);
   }
@@ -242,23 +263,24 @@ void sampleGenerationTask(void *pvParameters)
         //Serial.println(keyboardIndex);
         for (int i = 0; i < 12; ++i)
         {
-          if (ss & 1)
-          {
+          //if (ss & 1)
+          //{
             lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
+            //lower_phases[i] =  (uint32_t)((float) lower_phases[i] * (float)noteMult[i]);
             //Serial.println(noteMult[i]);
             Vout += (uint32_t)((float)((lower_phases[i] >> 24) - 128) * (float)noteMult[i]) >> (8 - volume) ;
-          }
+          //}
 
           if (ss & 0x1000)
           {
             middle_phases[i] += stepSizes[i] + bendStep;
-            Vout += ((middle_phases[i] >> 24) - 128) >> (8 - volume);
+            Vout += (uint32_t)((float)((middle_phases[i] >> 24) - 128) * (float)noteMult[i]) >> (8 - volume);
           }
 
           if (ss & 0x1000000)
           {
             upper_phases[i] += (stepSizes[i] << 1) + bendStep;
-            Vout += ((upper_phases[i] >> 24) - 128) >> (8 - volume);
+            Vout += (uint32_t)((float)((upper_phases[i] >> 24) - 128) * (float)noteMult[i]) >> (8 - volume);
           }
 
           ss = ss >> 1;
@@ -601,6 +623,7 @@ void setup()
   keyArrayMutex = xSemaphoreCreateMutex();
   notesArrayMutex = xSemaphoreCreateMutex();
   sampleBufferSemaphore = xSemaphoreCreateBinary();
+  noteMultiplierMutex = xSemaphoreCreateMutex();
   xSemaphoreGive(sampleBufferSemaphore);
 
   // Timer
