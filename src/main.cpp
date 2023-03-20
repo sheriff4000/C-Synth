@@ -65,6 +65,10 @@ volatile uint32_t global_Vout;
 // bendy bendy
 volatile uint32_t bendStep;
 
+// vibby vibby
+volatile float vibFactor;
+volatile int32_t vibStep;
+volatile bool vibPositive;
 // local knobs
 Knob local_knob0, local_knob1, local_knob2, local_knob3;
 
@@ -122,6 +126,63 @@ void setRow(uint8_t rowIdx)
   digitalWrite(REN_PIN, HIGH);
 }
 
+void setVibFactor(void *pvParameters){
+  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  long int joyChange;
+  float abs_joyChange;
+  while(1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    joyChange = 512 - analogRead(JOYY_PIN);
+    abs_joyChange = (joyChange < 0) ? -1.0 * joyChange : joyChange;
+    vibFactor = (abs_joyChange)/512.0;
+    //Serial.println(vibFactor);
+  }
+}
+
+void setVibStepTask(void *pvParameters){
+  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+   //vib things
+  int32_t vibVout;
+  float vibStepSize = 2049870/2; //1366580 * 2;
+  static uint32_t vibAcc = 0;
+  float_t vibAngle;
+
+  long int joyChange;
+  float abs_joyChange;
+  int i = 0;
+  float t;
+  float freq;
+  float tempVibStep;
+  while(1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    joyChange = 512 - analogRead(JOYY_PIN);
+    abs_joyChange = (joyChange < 0) ? -1.0 * joyChange : joyChange;
+    if (abs_joyChange < 100){
+      //abs_joyChange = 0;
+      vibStep = 0;
+      continue;
+    }
+
+    //vibFactor = (abs_joyChange)/512.0;
+    freq = 2500.0 * (abs_joyChange/512);
+
+    t = ((float)i) / 22000;
+    
+    tempVibStep = vibStepSize * sin(2 * 3.14 * freq * t);
+    vibStep = (int32_t) tempVibStep;
+    
+    if(i == 22000){
+      i = 0;
+    }
+    i++;
+    //Serial.println(vibFactor);
+  }
+}
+
 // Sample interrupt
 void sampleISR()
 {
@@ -164,6 +225,10 @@ void sampleGenerationTask(void *pvParameters)
   uint32_t lower_phases3[12] = {0};
   uint32_t middle_phases3[12] = {0};
   uint32_t upper_phases3[12] = {0};
+
+ 
+
+
   uint64_t ss;
   uint8_t volume;
   float pan;
@@ -171,6 +236,7 @@ void sampleGenerationTask(void *pvParameters)
   while (1)
   {
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
+    
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++)
     {
       // TODO check if g_note_states is ok to be accessed here
@@ -179,14 +245,14 @@ void sampleGenerationTask(void *pvParameters)
       ss = g_ss;
       Vout = 0;
       volume = global_knob3;
-     //pan = (float)global_knob4 / 8.0;
+      pan = (float)global_knob4 / 8.0;
     
       
       int8_t wave_type = global_knob2;
       int8_t octave_shift = global_knob0;
       bool pos_shift = (octave_shift > 0) ? true : false;
 
-  
+      int32_t stepOffset = bendStep + vibStep;
       
       if (wave_type == 0)
         {
@@ -196,7 +262,7 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
 
               // Vout += ((sin_lut[lower_phases0[i] >> 22]) >> 24) - 128;
               Vout += (sin_lut[lower_phases0[i] >> 22]) * 128;
@@ -211,7 +277,7 @@ void sampleGenerationTask(void *pvParameters)
 
             if (ss & 0x1000000)
             {
-              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
               // Vout += (sin_lut[upper_phases0[i] >> 22] >> 24) - 128;
               Vout += sin_lut[upper_phases0[i] >> 22] * 128;
             }
@@ -227,7 +293,7 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
+              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
 
               Vout += ((int)(lower_phases1[i] >> 31) & 1) ? -(int)(lower_phases1[i] >> 24) + 128 : (int)(lower_phases1[i] >> 24) - 128;
               // TEMP FIX
@@ -236,14 +302,14 @@ void sampleGenerationTask(void *pvParameters)
 
             if (ss & 0x1000)
             {
-              middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
+              middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
               Vout += ((int)(middle_phases1[i] >> 31) & 1) ? -(int)(middle_phases1[i] >> 24) + 128 : (int)(middle_phases1[i] >> 24) - 128;
               Vout += 64;
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
+              upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
               Vout += ((int)(upper_phases1[i] >> 31) & 1) ? -(int)(upper_phases1[i] >> 24) + 128 : (int)(upper_phases1[i] >> 24) - 128;
               Vout += 64;
             }
@@ -258,20 +324,20 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-              Vout += ((lower_phases2[i] >> 24) - 128);
+              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
+              Vout += ((int)(lower_phases2[i] >> 24) - 128);
             }
 
             if (ss & 0x1000)
             {
-              middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-              Vout += ((middle_phases2[i] >> 24) - 128);
+              middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
+              Vout += ((int)(middle_phases2[i] >> 24) - 128);
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-              Vout += ((upper_phases2[i] >> 24) - 128);
+              upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
+              Vout += ((int)(upper_phases2[i] >> 24) - 128);
             }
 
             ss = ss >> 1;
@@ -286,20 +352,20 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-              Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255);
+              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
+              Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> 2;
             }
 
             if (ss & 0x1000)
             {
-              middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-              Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255);
+              middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
+              Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> 2;
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-              Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255);
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
+              Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255)>> 2;
             }
 
             ss = ss >> 1;
@@ -307,24 +373,34 @@ void sampleGenerationTask(void *pvParameters)
         }
 
         Vout >>= (8 - volume);
+        
+      if (Vout > 127)
+      {
+        Vout = 127;
+      }
+      else if (Vout < -128)
+      {
+        Vout = -128;
+      }
 
 
-      // if(numberOfKeyboards == 2){
-      //   if(keyboardIndex == 0){
-      //     Vout = Vout * (1-pan);
-      //   }
-      //   else{
-      //     Vout = Vout * pan;
-      //   }
-      // }
-      // if(numberOfKeyboards == 3){
-      //   if(keyboardIndex == 0){
-      //     Vout = Vout * (1-pan);
-      //   }
-      //   else if(keyboardIndex == 2){
-      //     Vout = Vout *pan;
-      //   }
-      // }
+
+      if(numberOfKeyboards == 2){
+        if(keyboardIndex == 0){
+          Vout = Vout * (1-pan);
+        }
+        else{
+          Vout = Vout * pan;
+        }
+      }
+      if(numberOfKeyboards == 3){
+        if(keyboardIndex == 0){
+          Vout = Vout * (1-pan);
+        }
+        else if(keyboardIndex == 2){
+          Vout = Vout *pan;
+        }
+      }
 
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
@@ -459,9 +535,9 @@ void updateDisplayTask(void *pvParameters)
       uint8_t knob2rotation = global_knob2;
 
       // Knob 3 (volume)
-      u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
-      u8g2.setCursor(100,10);
-      u8g2.print(global_knob3, DEC);
+      //u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
+      u8g2.setCursor(70,10);
+      u8g2.print(vibStep, DEC);
 
       // Knob 2 (waveform)
       u8g2.drawStr(5, 10, "Waveform"); // write something to the internal memory
@@ -746,7 +822,7 @@ void setup()
       "sampleGeneration",       /* Text name for the task */
       256,                      /* Stack size in words, not bytes */
       NULL,                     /* Parameter passed into the task */
-      4,                        /* Task priority */
+      5,                        /* Task priority */
       &sampleGenerationHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanKeysHandle = NULL;
@@ -755,7 +831,7 @@ void setup()
       "scanKeys",       /* Text name for the task */
       64,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      3,                /* Task priority */
+      4,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanOtherBoards = NULL;
@@ -764,7 +840,7 @@ void setup()
       "scanOtherBoards",   /* Text name for the task */
       64,                  /* Stack size in words, not bytes */
       NULL,                /* Parameter passed into the task */
-      2,                   /* Task priority */
+      3,                   /* Task priority */
       &scanKeysHandle);    /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -775,6 +851,15 @@ void setup()
       NULL,                  /* Parameter passed into the task */
       1,                     /* Task priority */
       &updateDisplayHandle); /* Pointer to store the task handle */
+
+  TaskHandle_t setVibStep = NULL;
+  xTaskCreate(
+      setVibStepTask,     /* Function that implements the task */
+      "setVibrato",       /* Text name for the task */
+      64,                    /* Stack size in words, not bytes */
+      NULL,                  /* Parameter passed into the task */
+      2,                     /* Task priority */
+      &setVibStep); /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
   notesArrayMutex = xSemaphoreCreateMutex();
