@@ -8,7 +8,7 @@
 SemaphoreHandle_t keyArrayMutex;
 SemaphoreHandle_t notesArrayMutex;
 SemaphoreHandle_t sampleBufferSemaphore;
-SemaphoreHandle_t noteMultiplierMutex;
+//SemaphoreHandle_t noteMultiplierMutex;
 // Pin definitions
 // Row select and enable
 const int RA0_PIN = D3;
@@ -58,6 +58,15 @@ float_t sin_lut[1024] = {0, 0.00613588, 0.0122715, 0.0184067, 0.0245412, 0.03067
 // volatile to allow for concurrency
 volatile uint16_t g_note_states[3];
 volatile uint64_t g_ss;
+
+//loopy loop
+volatile uint16_t recorded_g_note_states[200][3];
+volatile int number_of_used_slots;
+volatile bool loop_play = false;
+volatile bool loop_record = false;
+volatile bool loopPlaying;
+volatile int loopIndex;
+volatile int endLoopIndex;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 volatile uint8_t note;
@@ -190,10 +199,10 @@ void setVibStepTask(void *pvParameters){
 }
 
 void keyPressExecution(void * pvParameters) {
-  Serial.println("entering/task stuff works");
+  //Serial.println("entering/task stuff works");
   uint8_t noteIdx = (int)pvParameters;
   //uint32_t attack = 100 * global_knob4;
-  uint32_t attack = 100 * 5;
+  uint32_t attack = 0;
   //uint32_t decay = 50 * global_knob5;
   uint32_t decay = 100 * 5;
   // float sustain = global_knob6/8;
@@ -210,7 +219,7 @@ void keyPressExecution(void * pvParameters) {
   xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
   g_note_temp = g_note_states[keyboardIndex];
   xSemaphoreGive(notesArrayMutex);
-  Serial.println(noteIdx);
+  //Serial.println(noteIdx);
   //attack
   while((currentTime < startTime + attack) && ((g_note_temp & (1 << noteIdx)) != 0)){
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
@@ -221,11 +230,11 @@ void keyPressExecution(void * pvParameters) {
     voutMult = atkDif;
     noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
   }
-  Serial.println("finished attack");
+  //Serial.println("finished attack");
   noteMult[noteIdx + (12 * keyboardIndex)] = 1;
   startTime = millis();
   currentTime = startTime;
-  Serial.println("starting decay");
+  //Serial.println("starting decay");
   //decay
   while((currentTime < startTime + decay) && ((g_note_temp & (1 << noteIdx)) != 0)){
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
@@ -235,7 +244,7 @@ void keyPressExecution(void * pvParameters) {
     voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
     noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
   }
-  Serial.println("finished decay");
+  //Serial.println("finished decay");
   voutMult = sustain;
   noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
   // sustain
@@ -244,7 +253,7 @@ void keyPressExecution(void * pvParameters) {
   xSemaphoreGive(notesArrayMutex);
 
   while ((g_note_temp & (1 << noteIdx)) != 0){
-    Serial.println("sustaining");
+    //Serial.println("sustaining");
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
     g_note_temp = g_note_states[keyboardIndex];
     xSemaphoreGive(notesArrayMutex);
@@ -253,7 +262,7 @@ void keyPressExecution(void * pvParameters) {
   currentTime = startTime;
   envActive[noteIdx + (12 * keyboardIndex)] = false;
   noteMult[noteIdx + (12 * keyboardIndex)] = 0;
-  Serial.println("ending task");
+  //Serial.println("ending task");
   vTaskDelete(NULL);
 }
 
@@ -267,6 +276,8 @@ void startEnvelopeTask(int noteIdx){
       1,                     /* Task priority */
       &envelopeTask);        /* Pointer to store the task handle */
 }
+
+
 
 // Sample interrupt
 void sampleISR()
@@ -511,8 +522,23 @@ void scanOtherBoardsTask(void *pvParameters)
     {
       CAN_RX(ID, RX_Message);
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+      uint16_t newNotes;
+      int counter = 0;
      
       g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+      if(loopPlaying){
+        newNotes = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
+        g_note_states[0] |= recorded_g_note_states[loopIndex][0];
+        int s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            Serial.println(counter);
+            startEnvelopeTask(counter);
+          }
+          counter++;
+          s <<= 1;
+        }
+      }
       int8_t tempknob0, tempknob1, tempknob2, tempknob3;
       
       tempknob0 = RX_Message[4];
@@ -698,7 +724,10 @@ void scanKeysTask(void *pvParameters)
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
 
-
+    //loop buttons
+    loop_record = !(keyArray[6] & 1);
+    loop_play = !(keyArray[6] & 2);
+    
     //knob key matrices
     knob3keymatrix = keyArray[3] & 0x03;
     knob2keymatrix = (keyArray[3] & 0x0C) >> 2;
@@ -776,13 +805,92 @@ void scanKeysTask(void *pvParameters)
    
 
     __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
-
+    uint16_t newNotes;
+    int counter = 0;
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_states[keyboardIndex] = note_states; // need to protect this at some point!!
+    g_note_states[keyboardIndex] = note_states;
+    if(loopPlaying){
+        newNotes = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
+        g_note_states[0] |= recorded_g_note_states[loopIndex][0];
+        int s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            Serial.println(counter);
+            startEnvelopeTask(counter);
+          }
+          counter++;
+          s <<= 1;
+        }
+      }
     g_ss = (uint64_t)g_note_states[0] + ((uint64_t)g_note_states[1] << 12) + ((uint64_t)g_note_states[2] << 24);
     xSemaphoreGive(notesArrayMutex);
   }
 }
+
+
+void playLoopTask(void *pvParameters){
+  loopPlaying = false;
+  const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  int currentIndexPlaying = 0;
+  loopIndex = 0;
+  bool button_pressed;
+  while (1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    if (!loop_record){
+      button_pressed = loop_play;
+    }else{
+      button_pressed = 0;
+    }
+    if(!button_pressed){
+      currentIndexPlaying = 0;
+      loopPlaying = false;
+    }
+    else{
+        loopPlaying = true;
+        loopIndex = currentIndexPlaying;
+        currentIndexPlaying++;
+        if(currentIndexPlaying >= endLoopIndex){
+          currentIndexPlaying = 0;
+        }
+      }
+  } 
+}
+
+
+void recordLoopTask(void *pvParameters){
+  const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  int currentIndexRecording = 0;
+  bool button_pressed;
+  endLoopIndex = 200;
+  while (1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    button_pressed = loop_record; // change to be the knob
+    if(!button_pressed){
+      currentIndexRecording = 0;
+    }
+    else{
+      if(currentIndexRecording == 0){
+        for(int i = 0; i < 100; ++i){
+          recorded_g_note_states[i][0] = 0;
+          recorded_g_note_states[i][1] = 0;
+          recorded_g_note_states[i][2] = 0;
+        }
+      }
+      if(currentIndexRecording < 200){
+        endLoopIndex = currentIndexRecording;
+        recorded_g_note_states[currentIndexRecording][0] = g_note_states[0];
+        recorded_g_note_states[currentIndexRecording][1] = g_note_states[1];
+        recorded_g_note_states[currentIndexRecording][2] = g_note_states[2];
+        currentIndexRecording+=1;
+        
+      }
+    
+    }
+  }
+}
+
 
 void handShake()
 {
@@ -912,16 +1020,41 @@ void setup()
       "sampleGeneration",       /* Text name for the task */
       256,                      /* Stack size in words, not bytes */
       NULL,                     /* Parameter passed into the task */
-      5,                        /* Task priority */
+      7,                        /* Task priority */
       &sampleGenerationHandle); /* Pointer to store the task handle */
 
+
+
+
+    // thread initialisation
+  TaskHandle_t loopRecordHandle = NULL;
+  xTaskCreate(
+      recordLoopTask,     /* Function that implements the task */
+      "recordLoop",       /* Text name for the task */
+      256,                      /* Stack size in words, not bytes */
+      NULL,                     /* Parameter passed into the task */
+      1,                        /* Task priority */
+      &loopRecordHandle); /* Pointer to store the task handle */
+
+    // thread initialisation
+  TaskHandle_t loopPlayHandle = NULL;
+  xTaskCreate(
+      playLoopTask,     /* Function that implements the task */
+      "playLoop",       /* Text name for the task */
+      256,                      /* Stack size in words, not bytes */
+      NULL,                     /* Parameter passed into the task */
+      2,                        /* Task priority */
+      &loopPlayHandle); 
+
+
+      
   TaskHandle_t scanKeysHandle = NULL;
   xTaskCreate(
       scanKeysTask,     /* Function that implements the task */
       "scanKeys",       /* Text name for the task */
       128,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      4,                /* Task priority */
+      6,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanOtherBoards = NULL;
@@ -930,7 +1063,7 @@ void setup()
       "scanOtherBoards",   /* Text name for the task */
       64,                  /* Stack size in words, not bytes */
       NULL,                /* Parameter passed into the task */
-      3,                   /* Task priority */
+      5,                   /* Task priority */
       &scanKeysHandle);    /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -939,7 +1072,7 @@ void setup()
       "updateDisplay",       /* Text name for the task */
       64,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      1,                     /* Task priority */
+      3,                     /* Task priority */
       &updateDisplayHandle); /* Pointer to store the task handle */
 
   TaskHandle_t setVibStep = NULL;
@@ -948,7 +1081,7 @@ void setup()
       "setVibrato",       /* Text name for the task */
       64,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      2,                     /* Task priority */
+      4,                     /* Task priority */
       &setVibStep); /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
