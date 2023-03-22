@@ -72,8 +72,8 @@ volatile int32_t vibStep;
 volatile bool vibPositive;
 
 //envylopey
-volatile float noteMult[36] = {0.};
-volatile bool envActive[36] = {false};
+volatile float noteMult[12] = {0.};
+volatile bool envActive[12] = {false};
 
 // local knobs
 Knob local_knob0, local_knob1, local_knob2, local_knob3;
@@ -190,83 +190,100 @@ void setVibStepTask(void *pvParameters){
 }
 
 void keyPressExecution(void * pvParameters) {
-  Serial.println("entering/task stuff works");
-  uint8_t noteIdx = (int)pvParameters;
-  //uint32_t attack = 100 * global_knob4;
-  uint32_t attack = 100 * 5;
-  //uint32_t decay = 50 * global_knob5;
-  uint32_t decay = 100 * 5;
-  // float sustain = global_knob6/8;
-  float sustain = 5./8.;
-  uint32_t release = 100 * 50;
+  //Serial.println("entering/task stuff works");
+  uint8_t note = (int)pvParameters;
+  uint32_t attack = 100 * global_knob4;
+  uint32_t decay = 50 * global_knob5;
+  float sustain = global_knob6/8;
+  uint32_t release = 100 * global_knob7;
   float voutMult = 0.0;
   int startTime = millis();
   int currentTime = startTime;
   float atkDif;
 
-  noteMult[noteIdx] = voutMult;
-  uint16_t g_note_temp;
+  noteMult[note] = voutMult;
 
-  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-  g_note_temp = g_note_states[keyboardIndex];
-  xSemaphoreGive(notesArrayMutex);
-  Serial.println(noteIdx);
   //attack
-  while((currentTime < startTime + attack) && ((g_note_temp & (1 << noteIdx)) != 0)){
-    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_temp = g_note_states[keyboardIndex];
-    xSemaphoreGive(notesArrayMutex);
+  while((currentTime < startTime + attack) && ((g_note_states[0] & (1 << note)) != 0)){
+    //if (g_note_states[0] & (1 << note) == 0) break;
+    //Serial.println("attacking");
+    delay(50);
     currentTime = millis();
-    atkDif = ((float)(currentTime - startTime) / (float)attack);
-    voutMult = atkDif;
-    noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
+    //voutMult = 0 + (float)(currentTime-startTime) / (float)attack;
+    if (currentTime > startTime + attack/10){
+      atkDif = ((float)(currentTime - startTime) / (float)attack);
+      voutMult = atkDif;
+      xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+      noteMult[note] = voutMult;
+      xSemaphoreGive(noteMultiplierMutex);
+    }
   }
-  Serial.println("finished attack");
-  noteMult[noteIdx + (12 * keyboardIndex)] = 1;
+  xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+  noteMult[note] = 1;
+  xSemaphoreGive(noteMultiplierMutex);
   startTime = millis();
   currentTime = startTime;
-  Serial.println("starting decay");
   //decay
-  while((currentTime < startTime + decay) && ((g_note_temp & (1 << noteIdx)) != 0)){
-    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_temp = g_note_states[keyboardIndex];
-    xSemaphoreGive(notesArrayMutex);
+  while(currentTime < startTime + decay){
+    if (g_note_states[0] & (1 << note) == 0) break;
+    //delay(50);
     currentTime = millis();
     voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
-    noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
+    xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+    noteMult[note] = voutMult;
+    xSemaphoreGive(noteMultiplierMutex);
   }
-  Serial.println("finished decay");
   voutMult = sustain;
-  noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
-  // sustain
-  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-   g_note_temp = g_note_states[keyboardIndex];
-  xSemaphoreGive(notesArrayMutex);
-
-  while ((g_note_temp & (1 << noteIdx)) != 0){
-    Serial.println("sustaining");
-    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_temp = g_note_states[keyboardIndex];
-    xSemaphoreGive(notesArrayMutex);
+  xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+  noteMult[note] = voutMult;
+  xSemaphoreGive(noteMultiplierMutex);
+  // //sustain
+  // Serial.println(g_note_states[0]);
+  // Serial.println(g_note_states[0] & (1 << note));
+  while ((g_note_states[0] & (1 << note)) != 0){
+    //Serial.println("sustaining");
+    //Serial.println(voutMult);
   }
   startTime = millis();
   currentTime = startTime;
-  envActive[noteIdx + (12 * keyboardIndex)] = false;
-  noteMult[noteIdx + (12 * keyboardIndex)] = 0;
-  Serial.println("ending task");
+  envActive[note] = false;
+  //release
+  if((g_note_states[0] & (1 << note)) == 0){
+    g_note_states[0] += 1 << note;
+  }
+  while(currentTime < startTime + release){
+    //Serial.println("releasing");
+    delay(50);
+    currentTime = millis();
+    voutMult = sustain - sustain * ((float)(currentTime-startTime) / (float)release);
+    if(voutMult < 0){
+      voutMult = 0;
+      xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+      noteMult[note] = voutMult;
+      xSemaphoreGive(noteMultiplierMutex);
+      break;
+    }
+    xSemaphoreTake(noteMultiplierMutex, portMAX_DELAY);
+    noteMult[note] = voutMult;
+    xSemaphoreGive(noteMultiplierMutex);
+    
+    //Serial.println(voutMult);
+  }
+  //Serial.println("ending task");
   vTaskDelete(NULL);
 }
 
-void startEnvelopeTask(int noteIdx){
+void startEnvelopeTask(int note){
   TaskHandle_t envelopeTask = NULL;
   xTaskCreate(
       keyPressExecution,     /* Function that implements the task */
       "enveloper",       /* Text name for the task */
-      256,                    /* Stack size in words, not bytes */
-      (void *)noteIdx,                  /* Parameter passed into the task */
+      128,                    /* Stack size in words, not bytes */
+      (void *)note,                  /* Parameter passed into the task */
       1,                     /* Task priority */
       &envelopeTask);        /* Pointer to store the task handle */
 }
+
 
 // Sample interrupt
 void sampleISR()
@@ -347,24 +364,24 @@ void sampleGenerationTask(void *pvParameters)
           {
             if (ss & 1)
             {
-              lower_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift)))) + stepOffset;
+              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
 
               // Vout += ((sin_lut[lower_phases0[i] >> 22]) >> 24) - 128;
-              Vout += (sin_lut[lower_phases0[i] >> 22]) * 128 * (float)noteMult[i];
+              Vout += (sin_lut[lower_phases0[i] >> 22]) * 128;
             }
 
             if (ss & 0x1000)
             {
-              middle_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)))) + stepOffset;
+              middle_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
               // Vout += (sin_lut[middle_phases0[i] >> 22] >> 24) - 128;
-              Vout += sin_lut[middle_phases0[i] >> 22] * 128 * (float)noteMult[i+12];
+              Vout += sin_lut[middle_phases0[i] >> 22] * 128;
             }
 
             if (ss & 0x1000000)
             {
-              upper_phases3[i] += ((pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift)))) + stepOffset;
+              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
               // Vout += (sin_lut[upper_phases0[i] >> 22] >> 24) - 128;
-              Vout += sin_lut[upper_phases0[i] >> 22] * 128 * (float)noteMult[i+24];
+              Vout += sin_lut[upper_phases0[i] >> 22] * 128;
             }
 
             ss = ss >> 1;
@@ -380,22 +397,22 @@ void sampleGenerationTask(void *pvParameters)
             {
               lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
 
-              Vout += (((int)(lower_phases1[i] >> 31) & 1) ? -(int)(lower_phases1[i] >> 24) + 128 : (int)(lower_phases1[i] >> 24)) * noteMult[i] - 128;
+              Vout += ((int)(lower_phases1[i] >> 31) & 1) ? -(int)(lower_phases1[i] >> 24) + 128 : (int)(lower_phases1[i] >> 24) - 128;
               // TEMP FIX
               Vout += 64;
             }
-           
+
             if (ss & 0x1000)
             {
               middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
-              Vout += (((int)(middle_phases1[i] >> 31) & 1) ? -(int)(middle_phases1[i] >> 24) + 128 : (int)(middle_phases1[i] >> 24)) * noteMult[i+12] - 128;
+              Vout += ((int)(middle_phases1[i] >> 31) & 1) ? -(int)(middle_phases1[i] >> 24) + 128 : (int)(middle_phases1[i] >> 24) - 128;
               Vout += 64;
             }
 
             if (ss & 0x1000000)
             {
               upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
-              Vout += (((int)(upper_phases1[i] >> 31) & 1) ? -(int)(upper_phases1[i] >> 24) + 128 : (int)(upper_phases1[i] >> 24)) * noteMult[i+24] - 128;
+              Vout += ((int)(upper_phases1[i] >> 31) & 1) ? -(int)(upper_phases1[i] >> 24) + 128 : (int)(upper_phases1[i] >> 24) - 128;
               Vout += 64;
             }
 
@@ -410,19 +427,19 @@ void sampleGenerationTask(void *pvParameters)
             if (ss & 1)
             {
               lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
-              Vout += ((int)(lower_phases2[i] >> 24) - 128) * noteMult[i];
+              Vout += ((int)(lower_phases2[i] >> 24) - 128);
             }
 
             if (ss & 0x1000)
             {
               middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
-              Vout += ((int)(middle_phases2[i] >> 24) - 128) * noteMult[i+12];
+              Vout += ((int)(middle_phases2[i] >> 24) - 128);
             }
 
             if (ss & 0x1000000)
             {
               upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
-              Vout += ((int)(upper_phases2[i] >> 24) - 128)* noteMult[i+24];
+              Vout += ((int)(upper_phases2[i] >> 24) - 128);
             }
 
             ss = ss >> 1;
@@ -435,23 +452,23 @@ void sampleGenerationTask(void *pvParameters)
 
           for (int i = 0; i < 12; ++i)
           {
-            if (ss & 1)
-            {
+            //if (ss & 1)
+            //{
               lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
-              Vout += ((((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> 2) * noteMult[i];
-            }
+              Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> 2;
+            //}
 
-            if (ss & 0x1000)
-            {
+            //if (ss & 0x1000)
+            //{
               middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
-              Vout += ((((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> 2) * noteMult[i+12];
-            }
+              Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> 2;
+            //}
 
-            if (ss & 0x1000000)
-            {
+            //if (ss & 0x1000000)
+            //{
               upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
-              Vout += ((((upper_phases3[i] >> 31) & 1) ? -255 : 255)>> 2) * noteMult[i+24];
-            }
+              Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255)>> 2;
+            //}
 
             ss = ss >> 1;
           }
@@ -641,25 +658,26 @@ void updateDisplayTask(void *pvParameters)
 
       // note showing
       // u8g2.drawStr(2, 30, notes[note]);
-    }else if(keyboardIndex == 1 || keyboardIndex == 2){
-      u8g2.drawStr(5,10,"VOL");
-      u8g2.drawStr(40,10,"VOL");
-      u8g2.drawStr(75,10,"VOL");
-      u8g2.drawStr(110,10,"VOL");
-      if(keyboardIndex ==1){
-        drawKnobLevel(5, global_knob4);
-        drawKnobLevel(40, global_knob5);
-        drawKnobLevel(75, global_knob6);
-        drawKnobLevel(110, global_knob7);
-      }
-      else{
-        drawKnobLevel(5, global_knob8);
-        drawKnobLevel(40, global_knob9);
-        drawKnobLevel(75, global_knob10);
-        drawKnobLevel(110, global_knob11);
-      }
+    }else if(keyboardIndex == 1){
+      u8g2.drawStr(5,10,"NON");
+      u8g2.drawStr(40,10,"PAN");
+      u8g2.drawStr(75,10,"NON");
+      u8g2.drawStr(110,10,"NON");
+      drawKnobLevel(5, global_knob4);
+      drawKnobLevel(40, global_knob5);
+      drawKnobLevel(75, global_knob6);
+      drawKnobLevel(110, global_knob7);
     }
-
+    else{
+      u8g2.drawStr(5,10,"ATK");
+      u8g2.drawStr(40,10,"DEC");
+      u8g2.drawStr(75,10,"SUS");
+      u8g2.drawStr(110,10,"REL");
+      drawKnobLevel(5, global_knob8);
+      drawKnobLevel(40, global_knob9);
+      drawKnobLevel(75, global_knob10);
+      drawKnobLevel(110, global_knob11);
+    }
 
     u8g2.print(global_knob11, DEC);
     // direction of rotation
@@ -739,15 +757,15 @@ void scanKeysTask(void *pvParameters)
     {
       if (!((keys & toAnd) & 0xfff))
       {
+        //envelope
+        if (!envActive[i]){
+          envActive[i] = true;
+          startEnvelopeTask(i);
+        }
         // note pressed
         note_states += toAnd;
         note = i;
         pressed = true;
-        //envelope
-        if (!envActive[i + (keyboardIndex * 12)]){
-          envActive[i + (keyboardIndex * 12)] = true;
-          startEnvelopeTask(i);
-        }
       }
       toAnd = toAnd << 1;
     }
@@ -919,7 +937,7 @@ void setup()
   xTaskCreate(
       scanKeysTask,     /* Function that implements the task */
       "scanKeys",       /* Text name for the task */
-      128,               /* Stack size in words, not bytes */
+      64,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
       4,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
