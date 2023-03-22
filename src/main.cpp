@@ -533,6 +533,7 @@ void scanOtherBoardsTask(void *pvParameters)
         for(int i = 0; i < 12; i++){
           if((newNotes & s) != 0){
             Serial.println(counter);
+            envActive[counter + (12 * keyboardIndex)] = true;
             startEnvelopeTask(counter);
           }
           counter++;
@@ -541,10 +542,10 @@ void scanOtherBoardsTask(void *pvParameters)
       }
       int8_t tempknob0, tempknob1, tempknob2, tempknob3;
       
-      tempknob0 = RX_Message[4];
-      tempknob1 = RX_Message[5];
-      tempknob2 = RX_Message[6];
-      tempknob3 = RX_Message[7];
+      tempknob0 = RX_Message[4] & 0xF;
+      tempknob1 = (RX_Message[4] & 0xF0) >> 4;
+      tempknob2 = RX_Message[5] & 0xF;
+      tempknob3 = (RX_Message[5] & 0xF0) >> 4;
       
       if(RX_Message[0] == 0){
         global_knob0 = tempknob0;
@@ -648,7 +649,11 @@ void updateDisplayTask(void *pvParameters)
       // Knob 3 (volume)
       //u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
       u8g2.setCursor(70,10);
-      u8g2.print(vibStep, DEC);
+      u8g2.print(global_knob4);
+      u8g2.print(global_knob5);
+      u8g2.print(global_knob6);
+      u8g2.print(global_knob7);
+
 
       // Knob 2 (waveform)
       u8g2.drawStr(5, 10, "Waveform"); // write something to the internal memory
@@ -669,21 +674,23 @@ void updateDisplayTask(void *pvParameters)
       // u8g2.drawStr(2, 30, notes[note]);
     }else if(keyboardIndex == 1 || keyboardIndex == 2){
       u8g2.drawStr(5,10,"VOL");
-      u8g2.drawStr(40,10,"VOL");
-      u8g2.drawStr(75,10,"VOL");
-      u8g2.drawStr(110,10,"VOL");
-      if(keyboardIndex ==1){
-        drawKnobLevel(5, global_knob4);
-        drawKnobLevel(40, global_knob5);
-        drawKnobLevel(75, global_knob6);
-        drawKnobLevel(110, global_knob7);
-      }
-      else{
-        drawKnobLevel(5, global_knob8);
-        drawKnobLevel(40, global_knob9);
-        drawKnobLevel(75, global_knob10);
-        drawKnobLevel(110, global_knob11);
-      }
+      // u8g2.drawStr(40,10,"VOL");
+      // u8g2.drawStr(75,10,"VOL");
+      // u8g2.drawStr(110,10,"VOL");
+      // if(keyboardIndex ==1){
+      //   drawKnobLevel(5, global_knob4);
+      //   drawKnobLevel(40, global_knob5);
+      //   drawKnobLevel(75, global_knob6);
+      //   drawKnobLevel(110, global_knob7);
+      // }
+      // else{
+      //   drawKnobLevel(5, global_knob8);
+      //   drawKnobLevel(40, global_knob9);
+      //   drawKnobLevel(75, global_knob10);
+      //   drawKnobLevel(110, global_knob11);
+      // 
+      Serial.println(g_note_states[0]);
+      u8g2.print(g_note_states[0], BIN);
     }
 
 
@@ -792,10 +799,9 @@ void scanKeysTask(void *pvParameters)
     temp_knob1 = local_knob1.get_rotation_atomic();
     temp_knob2 = local_knob2.get_rotation_atomic();
     temp_knob3 = local_knob3.get_rotation_atomic();
-    TX_Message[4] = temp_knob0 & 0xf;
-    TX_Message[5] = temp_knob1 & 0xf;
-    TX_Message[6] = temp_knob2 & 0xf;
-    TX_Message[7] = temp_knob3 & 0xf;
+    TX_Message[4] = ((temp_knob1 & 0xf) << 4) + (temp_knob0 & 0xf);
+    TX_Message[5] = ((temp_knob3 & 0xf) << 4) + (temp_knob2 & 0xf);
+
     if (numberOfKeyboards > 1)
     {
       CAN_TX(0x123, TX_Message);
@@ -816,6 +822,7 @@ void scanKeysTask(void *pvParameters)
         for(int i = 0; i < 12; i++){
           if((newNotes & s) != 0){
             Serial.println(counter);
+            envActive[counter + (12 * keyboardIndex)] = true;
             startEnvelopeTask(counter);
           }
           counter++;
