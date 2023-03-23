@@ -201,6 +201,7 @@ void setVibStepTask(void *pvParameters){
 void keyPressExecution(void * pvParameters) {
   //Serial.println("entering/task stuff works");
   uint8_t noteIdx = (int)pvParameters;
+  envActive[noteIdx] = true;
   //uint32_t attack = 100 * global_knob4;
   uint32_t attack = 0;
   //uint32_t decay = 50 * global_knob5;
@@ -212,57 +213,57 @@ void keyPressExecution(void * pvParameters) {
   int startTime = millis();
   int currentTime = startTime;
   float atkDif;
-
+  //Serial.println("hi");
   noteMult[noteIdx] = voutMult;
   uint16_t g_note_temp;
 
   xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-  g_note_temp = g_note_states[keyboardIndex];
+  g_note_temp = g_note_states[noteIdx / 12];
   xSemaphoreGive(notesArrayMutex);
   //Serial.println(noteIdx);
   //attack
-  while((currentTime < startTime + attack) && ((g_note_temp & (1 << noteIdx)) != 0)){
+  while((currentTime < startTime + attack) && ((g_note_temp & (1 << (noteIdx % 12))) != 0)){
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_temp = g_note_states[keyboardIndex];
+    g_note_temp = g_note_states[noteIdx / 12];
     xSemaphoreGive(notesArrayMutex);
     currentTime = millis();
     atkDif = ((float)(currentTime - startTime) / (float)attack);
     voutMult = atkDif;
-    noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
+    noteMult[noteIdx] = voutMult;
   }
   //Serial.println("finished attack");
-  noteMult[noteIdx + (12 * keyboardIndex)] = 1;
+  noteMult[noteIdx] = 1;
   startTime = millis();
   currentTime = startTime;
   //Serial.println("starting decay");
   //decay
-  while((currentTime < startTime + decay) && ((g_note_temp & (1 << noteIdx)) != 0)){
+  while((currentTime < startTime + decay) && ((g_note_temp & (1 << (noteIdx % 12))) != 0)){
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_temp = g_note_states[keyboardIndex];
+    g_note_temp = g_note_states[noteIdx / 12];
     xSemaphoreGive(notesArrayMutex);
     currentTime = millis();
     voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
-    noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
+    noteMult[noteIdx ] = voutMult;
   }
   //Serial.println("finished decay");
   voutMult = sustain;
-  noteMult[noteIdx + (12 * keyboardIndex)] = voutMult;
+  noteMult[noteIdx] = voutMult;
   // sustain
   xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-   g_note_temp = g_note_states[keyboardIndex];
+   g_note_temp = g_note_states[noteIdx / 12];
   xSemaphoreGive(notesArrayMutex);
 
-  while ((g_note_temp & (1 << noteIdx)) != 0){
+  while ((g_note_temp & (1 << (noteIdx % 12))) != 0){
     //Serial.println("sustaining");
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_temp = g_note_states[keyboardIndex];
+    g_note_temp = g_note_states[noteIdx / 12];
     xSemaphoreGive(notesArrayMutex);
   }
   startTime = millis();
   currentTime = startTime;
-  envActive[noteIdx + (12 * keyboardIndex)] = false;
-  noteMult[noteIdx + (12 * keyboardIndex)] = 0;
-  //Serial.println("ending task");
+  envActive[noteIdx] = false;
+  noteMult[noteIdx] = 0;
+  Serial.println("ending task");
   vTaskDelete(NULL);
 }
 
@@ -433,7 +434,7 @@ void sampleGenerationTask(void *pvParameters)
             if (ss & 0x1000000)
             {
               upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
-              Vout += ((int)(upper_phases2[i] >> 24) - 128)* noteMult[i+24];
+              Vout += ((int)(upper_phases2[i] >> 24) - 128) * noteMult[i+24];
             }
 
             ss = ss >> 1;
@@ -526,20 +527,6 @@ void scanOtherBoardsTask(void *pvParameters)
       int counter = 0;
      
       g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
-      if(loopPlaying){
-        newNotes = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
-        g_note_states[0] |= recorded_g_note_states[loopIndex][0];
-        int s = 1;
-        for(int i = 0; i < 12; i++){
-          if((newNotes & s) != 0){
-            Serial.println(counter);
-            envActive[counter + (12 * keyboardIndex)] = true;
-            startEnvelopeTask(counter);
-          }
-          counter++;
-          s <<= 1;
-        }
-      }
       int8_t tempknob0, tempknob1, tempknob2, tempknob3;
       
       tempknob0 = RX_Message[4] & 0xF;
@@ -662,18 +649,20 @@ void updateDisplayTask(void *pvParameters)
   
 
       // note showing
-      u8g2.drawStr(80, 30, "Note"); // write something to the internal memory
+      u8g2.drawStr(80, 20, "Note"); // write something to the internal memory // make back to 30
       // u8g2.drawStr(120, 30, notes[note]);
 
-      u8g2.setCursor(105, 30);
+      u8g2.setCursor(80, 30);
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-      u8g2.print(g_ss, HEX);
+      u8g2.print(global_knob4, DEC);
       xSemaphoreGive(notesArrayMutex);
 
       // note showing
       // u8g2.drawStr(2, 30, notes[note]);
     }else if(keyboardIndex == 1 || keyboardIndex == 2){
       u8g2.drawStr(5,10,"VOL");
+      u8g2.setCursor(30,10);
+      u8g2.print(global_knob4, DEC);
       // u8g2.drawStr(40,10,"VOL");
       // u8g2.drawStr(75,10,"VOL");
       // u8g2.drawStr(110,10,"VOL");
@@ -689,7 +678,7 @@ void updateDisplayTask(void *pvParameters)
       //   drawKnobLevel(75, global_knob10);
       //   drawKnobLevel(110, global_knob11);
       // 
-      Serial.println(g_note_states[0]);
+      //Serial.println(g_note_states[0]);
       u8g2.print(g_note_states[0], BIN);
     }
 
@@ -779,15 +768,12 @@ void scanKeysTask(void *pvParameters)
         note_states += toAnd;
         note = i;
         pressed = true;
-        //envelope
-        if (!envActive[i + (keyboardIndex * 12)]){
-          envActive[i + (keyboardIndex * 12)] = true;
-          startEnvelopeTask(i);
-        }
       }
       toAnd = toAnd << 1;
     }
-    int msg_states = note_states;
+
+
+    int msg_states = note_states; //you might wanna change this
     TX_Message[0] = keyboardIndex;
     TX_Message[1] = msg_states & 0xf;
     msg_states = msg_states >> 4;
@@ -815,21 +801,67 @@ void scanKeysTask(void *pvParameters)
     int counter = 0;
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
     g_note_states[keyboardIndex] = note_states;
+    //Serial.println(g_note_states[0]);
+
+    //envelope
+    for(int i = 0; i < 12; i++){
+      if (!envActive[i] && ((g_note_states[0] & (1 << i)) != 0)){
+        //Serial.println("helloo");
+        envActive[i] = true;
+        startEnvelopeTask(i);
+      }
+      if (!envActive[i+12] && ((g_note_states[1] & (1 << i)) != 0)){
+        Serial.println("yes");
+        envActive[i+12] = true;
+        startEnvelopeTask(i+12);
+        
+      }
+      if (!envActive[i+24] && ((g_note_states[2] & (1 << i)) != 0)){
+        envActive[i+24] = true;
+        startEnvelopeTask(i+24);
+      }
+    }
+    
+    
     if(loopPlaying){
         newNotes = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
         g_note_states[0] |= recorded_g_note_states[loopIndex][0];
         int s = 1;
         for(int i = 0; i < 12; i++){
           if((newNotes & s) != 0){
-            Serial.println(counter);
-            envActive[counter + (12 * keyboardIndex)] = true;
-            startEnvelopeTask(counter);
+            envActive[i] = true;
+            startEnvelopeTask(i);
           }
-          counter++;
           s <<= 1;
         }
+
+        newNotes = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
+        g_note_states[1] |= recorded_g_note_states[loopIndex][1];
+        s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            envActive[i+12] = true;
+            startEnvelopeTask(i+12);
+          }
+          s <<= 1;
+        }
+
+        newNotes = (recorded_g_note_states[loopIndex][2]) & (~g_note_states[2]);
+        g_note_states[2] |= recorded_g_note_states[loopIndex][2];
+        s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            envActive[i+24] = true;
+            startEnvelopeTask(i+24);
+          }
+          s <<= 1;
+        }
+        
       }
+      
     g_ss = (uint64_t)g_note_states[0] + ((uint64_t)g_note_states[1] << 12) + ((uint64_t)g_note_states[2] << 24);
+      
+   
     xSemaphoreGive(notesArrayMutex);
   }
 }
