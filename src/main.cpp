@@ -555,6 +555,42 @@ void scanOtherBoardsTask(void *pvParameters)
         global_knob10 = tempknob2;
         global_knob11 = tempknob3;          
       }
+
+      if(loopPlaying){
+        newNotes = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
+        g_note_states[0] |= recorded_g_note_states[loopIndex][0];
+        int s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            envActive[i] = true;
+            startEnvelopeTask(i);
+          }
+          s <<= 1;
+        }
+
+        newNotes = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
+        g_note_states[1] |= recorded_g_note_states[loopIndex][1];
+        s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            envActive[i+12] = true;
+            startEnvelopeTask(i+12);
+          }
+          s <<= 1;
+        }
+
+        newNotes = (recorded_g_note_states[loopIndex][2]) & (~g_note_states[2]);
+        g_note_states[2] |= recorded_g_note_states[loopIndex][2];
+        s = 1;
+        for(int i = 0; i < 12; i++){
+          if((newNotes & s) != 0){
+            envActive[i+24] = true;
+            startEnvelopeTask(i+24);
+          }
+          s <<= 1;
+        }
+        
+      }
     
       xSemaphoreGive(notesArrayMutex);
     }
