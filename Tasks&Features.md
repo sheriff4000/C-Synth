@@ -1,0 +1,71 @@
+# Tasks & Features
+
+## Advanced features
+
+- Polyphony
+  - Multiple notes can be played together to form chords
+  - Enabled by playing multiple notes simultaneously
+  - Limitation: the more notes pressed, the more the output is clipped and so the more distortion is applied.
+- Pitch bend
+  - Turning the joystick on the keyboard horizontally lowers/raises the pitch slightly and continuously
+  - Limitation: the amount of pitch bend applied is constant, so the effect is more noticeable at different frequencies.
+- Vibrato
+  - Moving the joystick vertically applies a sinusoidal effect to the frequency of the notes being played.
+- Global stereo speakers
+  - All speakers output current Vout
+- Panning of speakers
+  - Move the location of speaker output to different speakers when connected
+- Envelope
+  - Attack, Sustain, Decay
+- Multiple output waveforms (sine, triangle, sawtooth, pulse)
+  - Different waveforms output to Vout
+- Looping
+  - Current melody recorded and can be played on loop until desired
+  - Note: Looping only plays in the middle keyboard and thus more than one keyboard is required
+- Aesthetic graphical user interface
+  - Easy to use user interface displaying all knob values
+
+## Tasks (thread/interrupt)
+
+Overview:
+
+|         Task         | Interrupt/Thread | Priority | Stack size |
+| :------------------: | ---------------- | :------: | ---------- |
+| sampleGenerationTask | Thread           |    8     | 256        |
+|     scanKeysTask     | Thread           |    7     | 128        |
+|   scanOtherBoards    | Thread           |    6     | 64         |
+|    setVibStepTask    | Thread           |    5     | 64         |
+|  updateDisplayTask   | Thread           |    4     | 64         |
+|    metronomeTask     | Thread           |    3     | 64         |
+|     playLoopTask     | Thread           |    2     | 256        |
+|    recordLoopTask    | Thread           |    1     | 256        |
+|  startEnvelopeTask   | Thread           |    1     | 256        |
+|      sampleISR       | Interrupt        | 22000Hz  |            |
+
+**\*\***sampleGenerationTask**\*\***
+
+This task takes the current state of each key, as well as all of the values of the current knobs and uses these values to generate the Vout values. These values are written into a buffer called sampleBuffer This task is implemented using a thread. This task has the highest priority of all other tasks, as it has the highest frequency and the task of producing sound is the most important feature of the synthesiser.
+
+**\*\*\*\***sampleISR - interrupt**\*\*\*\***
+
+This function takes the Vout values written into the sampleBuffer and writes them to the analog output pin which creates the sound. This task is implemented as an interrupt, because it is run at an extremely fast frequency and has priority over any other task performed by the system, so must be able to stop the execution of the other tasks at any point.
+
+\***\*\*\*\*\***\*\*\*\*\***\*\*\*\*\***scanKeysTask\***\*\*\*\*\***\*\*\*\*\***\*\*\*\*\***
+
+This function reads the state of each key in the keyboard, as well as the values of each knob. It then updates the state variables keeping track of each of these values, as well as transmits the state of the keyboard to the other connected keyboards via CAN. This function is implemented as a task which is timed to
+
+**\*\***scanOtherBoardsTask**\*\***
+
+This task uses CAN to check for messages sent from other boards in the keyboard. Each me
+
+\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***updateDisplayTask\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***
+
+\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***recordLoopTask\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***
+
+\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***playLoopTask\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***
+
+\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***setVibStepTask\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***
+
+This task constantly scans the joystick to calculate an offset (added to the step size for the accumulator) that varies sinusoidally.
+
+\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***metronomeTask\***\*\*\*\*\*\*\***\*\*\***\*\*\*\*\*\*\***
