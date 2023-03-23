@@ -7,11 +7,23 @@
  
 ## Execution time
 
+|         Task         | Initiation Interval (ms)| Maximum Execution time |
+|:--------------------:|-------------------------|:----------------------:|
+| sampleGenerationTask |        5.818            |     8                  |
+|     scanKeysTask     |         -               |     7                  |
+| scanOtherBoards      |        20               | 6                      |
+| setVibStepTask       |       20                | 5                      |
+|   updateDisplayTask  |       100               |      4                 |
+| metronomeTask        |       -                 | 3                             |
+| playLoopTask         |       50                | 2                             |
+|    recordLoopTask    |      50                 |     1                         |
+| keyPressExecution    | Thread                  |     1                        |
+|       sampleISR      | Interrupt               |  22000Hz               |
+
 ## Total CPU utilisation
 
 ## Shared data structures and methods used to guarantee safe access and synchronisation
-- Knob class
-
+ - The latency of the lowest-priority task ($t_n$) is 
 
 ## Analysis of inter-task dependencies that show any possibility of deadlock
 
