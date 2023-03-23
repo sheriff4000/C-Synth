@@ -15,28 +15,49 @@
 
 ## Analysis of inter-task dependencies that show any possibility of deadlock
 
-Grouping variables based on their function, the following groups arise:
-    - Handshaking variables
-    - Keyboard defining variables
-    - Note state variables
-    - Loop variables
-    - Step offset variables
-    - Envelope variables
-    - Global knobs
+- sampleGenerationTask dependencies
+    - global knobs 0, 2, 3, 4
+    - bendStep
+    - vibStep
+    - keyboardIndex & numberOfKeyboards
+    - sampleBuffer 0 & 1
 
-- Handshaking variables
-    - Only used in the handShake(), to initialise 
 
-- Keyboard defining variables
-    - Used in most functions (e.g. scanKeys, updateDisplay, sampleGeneration) but it is only defined in setup, so no inter-task dependencies
-- Note state variables 
-    - Constantly read and written to so large risk of dependencies. To access, we use the semaphore noteArrayMutex in keyPressExecution, scanOtherBoards and scanKeysTask. None of these semaphore sections (take then give) have any waiting conditions that could cause deadlock.
-- Loop variables
-    - 
-- Step offset variables
-    -
-- Envelope variables
-    -
-- Global knobs
-    -
+- sampleISR - interrupt dependencies
+    - sampleBuffer 0 and 1
+
+- scanKeysTask
+    - g_note_ states
+    - global knobs
+    - recorded_g_note_states
+    - keyboardIndex
+    - envActive
+    - loopPlaying
+
+- scanOtherBoardsTask
+    - loop_record and loop_play
+    - global knobs
+    - loopPlaying
+    - recorded_g_note_states
+    - g_note_ states
+    - envActive
+
+- updateDisplayTask
+    - keyboardIndex
+    - global knobs
+    - loop_record and loop_play
+
+- recordLoopTask
+    - recorded_g_note_states
+    - g_note_states
+- playLoopTask
+    - loopPlaying
+    - loop_record and loop_play
+    - loopIndex
+
+- setVibStepTask
+    -  vibStep
+
+- metronomeTask
+    - metronomeBeep
 
