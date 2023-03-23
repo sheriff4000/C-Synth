@@ -64,6 +64,6 @@ This task uses CAN to check for messages sent from other boards in the keyboard.
 
 **************************setVibStepTask**************************
 
-This task constantly scans the joystick to calculate an offset (added to the step size of the accumulator) that varies sinusoidally.
+This task constantly scans the joystick to calculate an offset (added to the step size for the accumulator) that varies sinusoidally.
 
 **************************metronomeTask**************************
