@@ -528,7 +528,10 @@ void scanOtherBoardsTask(void *pvParameters)
      
       g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
       int8_t tempknob0, tempknob1, tempknob2, tempknob3;
-      
+      if(keyboardIndex != 0){
+        loop_record = RX_Message[6];
+        loop_play = RX_Message[7];
+      }
       tempknob0 = RX_Message[4] & 0xF;
       tempknob1 = (RX_Message[4] & 0xF0) >> 4;
       tempknob2 = RX_Message[5] & 0xF;
@@ -721,8 +724,10 @@ void scanKeysTask(void *pvParameters)
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
 
     //loop buttons
-    loop_record = !(keyArray[6] & 1);
-    loop_play = !(keyArray[6] & 2);
+    if(keyboardIndex == 0){
+      loop_record = !(keyArray[6] & 1);
+      loop_play = !(keyArray[6] & 2);
+    }
     
     //knob key matrices
     knob3keymatrix = keyArray[3] & 0x03;
@@ -787,7 +792,10 @@ void scanKeysTask(void *pvParameters)
     temp_knob3 = local_knob3.get_rotation_atomic();
     TX_Message[4] = ((temp_knob1 & 0xf) << 4) + (temp_knob0 & 0xf);
     TX_Message[5] = ((temp_knob3 & 0xf) << 4) + (temp_knob2 & 0xf);
-
+    if(keyboardIndex == 0){
+      TX_Message[6] = loop_record;
+      TX_Message[7] = loop_play;
+    }
     if (numberOfKeyboards > 1)
     {
       CAN_TX(0x123, TX_Message);
@@ -879,7 +887,7 @@ void playLoopTask(void *pvParameters){
     if (!loop_record){
       button_pressed = loop_play;
     }else{
-      button_pressed = 0;
+      button_pressed = false;
     }
     if(!button_pressed){
       currentIndexPlaying = 0;
