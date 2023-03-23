@@ -18,7 +18,7 @@
 ## Critical analysis of rate monotonic scheduler
 Critical analysis can be performed to see if a specific schedule will work. The latency ($L_n$) of the lowest-priority task ($\tau_n$) is x at the worst-instance in time. The following formula can be used to calculate whether the schedule will work: 
 
-<div align="center"> $\Huge L_n = \sum_{i=1}[\frac{\tau_n}{\tau_i}]\cdot T_i \le \tau_n$
+$\Huge L_n = \sum_{i=1}[\frac{\tau_n}{\tau_i}]\cdot T_i \le \tau_n$
 
 where \tau_i is the initiation interval and $T_i$ is the execution time for task for task $i$.  
 
@@ -26,7 +26,7 @@ where \tau_i is the initiation interval and $T_i$ is the execution time for task
 
 The CPU utilisation can be calculated through the following equation:
 
-<div align="center"> $\Huge CPU Utilisation = \sum_{i=1}[\frac{\tau_i}{\T_i}]$
+ $\Huge CPU Utilisation = \sum_{i=1}[\frac{\tau_i}{\T_i}]$
 
 The measured CPU utilisation under these tests was calculated using the results obtained in Section [## Minimum initiation interval and measured maximum execution time of each task]. The CPU Utilisation is x.
 
