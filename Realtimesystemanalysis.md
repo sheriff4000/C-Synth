@@ -2,17 +2,16 @@
 
 ## Minimum initiation interval and measured maximum execution time of each task
 
-|         Task         | Initiation Interval (ms)| Maximum Execution time |
+|         Task         | Initiation Interval (ms)| Maximum Execution time(us) |
 |:--------------------:|-------------------------|:----------------------:|
-| sampleGenerationTask |        5.818            |     8                  |
-|     scanKeysTask     |         -               |     7                  |
-| scanOtherBoards      |        20               | 6                      |
-| setVibStepTask       |       20                | 5                      |
-|   updateDisplayTask  |       100               |      4                 |
-| metronomeTask        |       -                 | 3                             |
-| playLoopTask         |       50                | 2                             |
-|    recordLoopTask    |      50                 |     1                         |
-| keyPressExecution    | Thread                  |     1                        |
+| sampleGenerationTask |        5.818            |     2462.25                |
+|     scanKeysTask     |         -               |       1315.1875                |
+| scanOtherBoards      |        20               |      18380.8125                   |
+| setVibStepTask       |       20                |      165.375                 |
+|   updateDisplayTask  |       100               |      17141.0312                 |
+| metronomeTask        |       -                 | 0.46875                             |
+| playLoopTask         |       50                | 0.53125                             |
+|    recordLoopTask    |      50                 |     17.25                         |
 |       sampleISR      | Interrupt               |  22000Hz               |
 
 ## Critical analysis of rate monotonic scheduler
@@ -37,8 +36,9 @@ The measured CPU utilisation under these tests was calculated using the results 
 
 ## Analysis of inter-task dependencies that show any possibility of deadlock
 
-The following lists show the  dependencies on shared/global data structures for each task as well as how any deadlocks are avoided
-### sampleGenerationTask
+The following lists show the  dependencies on shared/global data structures for each task:
+
+- sampleGenerationTask
     - Read
         - global knobs 0, 2, 3, 4 
         - bendStep 
@@ -46,15 +46,12 @@ The following lists show the  dependencies on shared/global data structures for 
         - keyboardIndex & numberOfKeyboards 
         - sampleBuffer 0 & 1 
         - noteMult 
-    the task only has read dependencies so pre
-
-
-### sampleISR
+    
+- sampleISR
     - Read
         - sampleBuffer 0 and 1 
     
-
-### scanKeysTask
+- scanKeysTask
     - Read
         - recorded_g_note_states 
         - keyboardIndex 
@@ -68,29 +65,47 @@ The following lists show the  dependencies on shared/global data structures for 
         - bendStep
 
 - scanOtherBoardsTask
-    - loop_record and loop_play
-    - global knobs
-    - loopPlaying
-    - recorded_g_note_states
-    - g_note_ states
-    - envActive
+    - Read 
+        - envActive
+        - recorded_g_note_states
+        - loop_record and loop_play
+        - loopPlaying
+    - Write
+        - global knobs
+        - envActive
+        - g_note_states
 
 - updateDisplayTask
-    - keyboardIndex
-    - global knobs
-    - loop_record and loop_play
+    - Read
+        - keyboardIndex 
+        - global knobs 
+        - loop_record and loop_play 
 
 - recordLoopTask
-    - recorded_g_note_states
-    - g_note_states
+    - Read 
+        - g_note_states 
+    - Write
+        - recorded_g_note_states 
+
 - playLoopTask
-    - loopPlaying
-    - loop_record and loop_play
-    - loopIndex
+    - Read 
+        - loop_record and loop_play 
+    - Write
+        - loopPlaying 
+        - loopIndex 
 
 - setVibStepTask
-    -  vibStep
+    - Write
+        - vibStep 
 
 - metronomeTask
-    - metronomeBeep
+    - Write
+        - metronomeBeep 
+
+- keyPressExecution
+    - Read
+        - g_note_states
+    -Write
+        - envActive
+        - noteMult
 
