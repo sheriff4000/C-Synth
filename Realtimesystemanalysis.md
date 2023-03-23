@@ -16,9 +16,9 @@
 |       sampleISR      | Interrupt               |  22000Hz               |
 
 ## Critical analysis of rate monotonic scheduler
-Critical analysis can be performed to see if a specific schedule will work. The latency ($L_n$) of the lowest-priority task ($\tai_n$) is x at the worst-instance in time. The following formula can be used to calculate whether the schedule will work: 
+Critical analysis can be performed to see if a specific schedule will work. The latency ($L_n$) of the lowest-priority task ($\tau_n$) is x at the worst-instance in time. The following formula can be used to calculate whether the schedule will work: 
 
- $\Huge L_n = \sum_{i=1}[\frac{\tau_n}{\tau_i}]\cdot T_n \le \tau_n$
+\centering $\Huge L_n = \sum_{i=1}[\frac{\tau_n}{\tau_i}]\cdot T_n \le \tau_n$
 
 ## Total CPU utilisation
 
