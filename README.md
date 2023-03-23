@@ -12,6 +12,6 @@ Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones 
 
 4. [Video](##Video)
 
-##Photos
+## Photos
 
-##Video
+## Video
