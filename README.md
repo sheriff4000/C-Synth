@@ -8,6 +8,10 @@ Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones 
 
 2. [Real time system analysis](Realtimesystemanalysis.md)
 
-3. [Photos](photos.md) 
+3. [Photos](##Photos) 
 
-4. [Video](###Video)
+4. [Video](##Video)
+
+##Photos
+
+##Video
