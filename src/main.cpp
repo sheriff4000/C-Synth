@@ -189,7 +189,7 @@ void keyPressExecution(void *pvParameters)
   uint8_t noteIdx = (int)pvParameters;
 
   // Envelope parameters
-  
+
   uint32_t attack = 100 * __atomic_load_n(&global_knob7, __ATOMIC_RELAXED);
   uint32_t decay = 50 * __atomic_load_n(&global_knob8, __ATOMIC_RELAXED);
   float sustain = 1;
@@ -224,7 +224,7 @@ void keyPressExecution(void *pvParameters)
   xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
   envActive[noteIdx] = false;
   noteMult[noteIdx] = 1;
-  xSemaphoreGive(notesArrayMutex);  
+  xSemaphoreGive(notesArrayMutex);
 
   startTime = millis();
   currentTime = startTime;
@@ -239,11 +239,10 @@ void keyPressExecution(void *pvParameters)
     voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
     noteMult[noteIdx] = voutMult;
     xSemaphoreGive(notesArrayMutex);
-
   }
 
   voutMult = sustain;
-  xSemaphoreTake(notesArrayMutex, portMAX_DELAY); 
+  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
   noteMult[noteIdx] = voutMult;
   g_note_temp = g_note_states[noteIdx / 12];
   envActive[noteIdx] = false;
@@ -270,13 +269,7 @@ void keyPressExecution(void *pvParameters)
 void startEnvelopeTask(int noteIdx)
 {
   TaskHandle_t envelopeTask = NULL;
-  xTaskCreate(
-      keyPressExecution, /* Function that implements the task */
-      "enveloper",       /* Text name for the task */
-      256,               /* Stack size in words, not bytes */
-      (void *)noteIdx,   /* Parameter passed into the task */
-      1,                 /* Task priority */
-      &envelopeTask);    /* Pointer to store the task handle */
+  xTaskCreate(keyPressExecution, "enveloper", 256, (void *)noteIdx, 1, &envelopeTask);
 }
 
 // Sample interrupt (with double buffer)
@@ -365,7 +358,6 @@ void sampleGenerationTask(void *pvParameters)
           if (ss & 0x1000)
           {
             middle_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)))) + stepOffset;
-            // Vout += (sin_lut[middle_phases0[i] >> 22] >> 24) - 128;
             Vout += sin_lut[middle_phases0[i] >> 22] * 128 * (float)noteMult[i + 12];
           }
 
@@ -373,7 +365,6 @@ void sampleGenerationTask(void *pvParameters)
           if (ss & 0x1000000)
           {
             upper_phases3[i] += ((pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift)))) + stepOffset;
-            // Vout += (sin_lut[upper_phases0[i] >> 22] >> 24) - 128;
             Vout += sin_lut[upper_phases0[i] >> 22] * 128 * (float)noteMult[i + 24];
           }
 
@@ -389,7 +380,6 @@ void sampleGenerationTask(void *pvParameters)
           if (ss & 1)
           {
             lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
-
             Vout += (((int)(lower_phases1[i] >> 31) & 1) ? -(int)(lower_phases1[i] >> 24) + 128 : (int)(lower_phases1[i] >> 24)) * noteMult[i] - 128;
             Vout += 64;
           }
@@ -536,10 +526,9 @@ void scanOtherBoardsTask(void *pvParameters)
     while (CAN_CheckRXLevel())
     {
       CAN_RX(ID, RX_Message);
-      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
       uint16_t newNotes0, newNotes1, newNotes2;
 
-      // Array of 3
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
       g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
 
       // Sending looping message to other boards
@@ -548,6 +537,7 @@ void scanOtherBoardsTask(void *pvParameters)
         loop_record = RX_Message[6];
         loop_play = RX_Message[7];
       }
+      xSemaphoreGive(notesArrayMutex);
 
       // Knob values received from other boards
       int8_t tempknob0, tempknob1, tempknob2, tempknob3;
@@ -558,27 +548,28 @@ void scanOtherBoardsTask(void *pvParameters)
 
       if (RX_Message[0] == 0)
       {
-        global_knob0 = tempknob0;
-        global_knob1 = tempknob1;
-        global_knob2 = tempknob2;
-        global_knob3 = tempknob3;
+        __atomic_store_n(&global_knob0, tempknob0, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob1, tempknob1, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob2, tempknob2, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob3, tempknob3, __ATOMIC_RELAXED);
       }
       if (RX_Message[0] == 1)
       {
-        global_knob4 = tempknob0;
-        global_knob5 = tempknob1;
-        global_knob6 = tempknob2;
-        global_knob7 = tempknob3;
+        __atomic_store_n(&global_knob4, tempknob0, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob5, tempknob1, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob6, tempknob2, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob7, tempknob3, __ATOMIC_RELAXED);
       }
       else
       {
-        global_knob8 = tempknob0;
-        global_knob9 = tempknob1;
-        global_knob10 = tempknob2;
-        global_knob11 = tempknob3;
+        __atomic_store_n(&global_knob8, tempknob0, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob9, tempknob1, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob10, tempknob2, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob11, tempknob3, __ATOMIC_RELAXED);
       }
 
       // Loop running
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
       if (loopPlaying && (keyboardIndex == 1))
       {
         newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
@@ -611,9 +602,8 @@ void scanOtherBoardsTask(void *pvParameters)
         g_note_states[1] |= recorded_g_note_states[loopIndex][1];
         g_note_states[2] |= recorded_g_note_states[loopIndex][2];
       }
-
       xSemaphoreGive(notesArrayMutex);
-    }
+        }
   }
 }
 
