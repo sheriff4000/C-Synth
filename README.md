@@ -2,14 +2,7 @@
 
 Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones (arj120), Chris Myers (cm1220)
 
-## Advanced features 
-
-1. Feature
-  - Description of feature functionality
-
-## Tasks (thread/interrupt)
-
-### Task x
+1. [Tasks & Features](Tasks&Features.md)
 
 ## Real time system analysis 
 
