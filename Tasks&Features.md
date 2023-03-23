@@ -40,3 +40,12 @@ This function reads the state of each key in the keyboard, as well as the values
 This task uses CAN to check for messages sent from other boards in the keyboard. Each me
 
 **************************updateDisplayTask**************************
+
+
+**************************recordLoopTask**************************
+
+
+**************************playLoopTask**************************
+
+**************************setVibStepTask**************************
+
