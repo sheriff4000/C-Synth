@@ -1,6 +1,7 @@
 # ES-synth Project
 
-Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones (arj120), Chris Myers (cm1220)
+This mardown contains links to other markdown files which give descriptions of all features,tasks and real time analysis about the firmware for our Synth. 
+Project members: Rohan Gandhi (rg720), Sherif Agbabiaka (sa1420), Anthony Jones (arj120), Chris Myers (cm1220).
 
 ## Table of Contents
 
