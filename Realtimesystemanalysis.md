@@ -5,14 +5,14 @@
 |         Task         | Initiation Interval (ms)| Maximum Execution time(us) |
 |:--------------------:|-------------------------|:----------------------:|
 | sampleGenerationTask |        5.818            |     2462.25                |
-|     scanKeysTask     |         -               |       1315.1875                |
+|     scanKeysTask     |         200               |       1315.1875                |
 | scanOtherBoards      |        20               |      18380.8125                   |
 | setVibStepTask       |       20                |      165.375                 |
 |   updateDisplayTask  |       100               |      17141.0312                 |
-| metronomeTask        |       -                 | 0.46875                             |
+| metronomeTask        |       10000                 | 0.46875                             |
 | playLoopTask         |       50                | 0.53125                             |
 |    recordLoopTask    |      50                 |     17.25                         |
-|       sampleISR      | Interrupt               |  22000Hz               |
+|       sampleISR      |    0.045455                  | 9.0625               |
 
 ## Critical analysis of rate monotonic scheduler
 Critical analysis can be performed to see if a specific schedule will work. The latency ($L_n$) of the lowest-priority task ($\tau_n$) is x at the worst-instance in time. The following formula can be used to calculate whether the schedule will work: 
