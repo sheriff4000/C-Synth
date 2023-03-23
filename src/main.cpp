@@ -327,19 +327,21 @@ void sampleGenerationTask(void *pvParameters)
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++)
     {
 
-      ss = g_ss;
       Vout = 0;
-      volume = global_knob3;
-      pan = (float)global_knob4 / 8.0;
+      volume = __atomic_load_n(&global_knob3, __ATOMIC_RELAXED);
+      pan = (float)__atomic_load_n(&global_knob4, __ATOMIC_RELAXED) / 8.0;
 
-      int8_t wave_type = global_knob2;
-      int8_t octave_shift = global_knob0;
+      int8_t wave_type = __atomic_load_n(&global_knob2, __ATOMIC_RELAXED);
+      int8_t octave_shift = __atomic_load_n(&global_knob0, __ATOMIC_RELAXED);
       bool pos_shift = (octave_shift > 0) ? true : false;
 
       // TODO: is bendStep a safe read? Atomic it?
       uint32_t bend = __atomic_load_n(&bendStep, __ATOMIC_RELAXED);
       int32_t vib = __atomic_load_n(&vibStep, __ATOMIC_RELAXED);
       int32_t stepOffset = bend + vib;
+
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+      ss = g_ss;
 
       // sine wave
       if (wave_type == 0)
@@ -461,6 +463,7 @@ void sampleGenerationTask(void *pvParameters)
           ss = ss >> 1;
         }
       }
+      xSemaphoreGive(notesArrayMutex);
 
       // Volume shifting
       Vout >>= (8 - volume);
@@ -603,7 +606,7 @@ void scanOtherBoardsTask(void *pvParameters)
         g_note_states[2] |= recorded_g_note_states[loopIndex][2];
       }
       xSemaphoreGive(notesArrayMutex);
-        }
+    }
   }
 }
 
@@ -614,7 +617,7 @@ void drawKnobLevel(int xCoordinate, uint8_t knob_value)
   {
     u8g2.drawLine(xCoordinate, 30 - 2 * i, xCoordinate + 15, 30 - 2 * i);
     u8g2.drawLine(xCoordinate, 29 - 2 * i, xCoordinate + 15, 29 - 2 * i);
-    drawKnobLevel(5, global_knob0);
+    drawKnobLevel(5, __atomic_load_n(&global_knob0, __ATOMIC_RELAXED));
   }
 }
 
@@ -730,11 +733,11 @@ void updateDisplayTask(void *pvParameters)
       drawKnobLevel(110, knob7rotation);
 
       // Displaying appropriate symbols based on record/play
-      if (loop_record)
+      if (__atomic_load_n(&loop_record, __ATOMIC_RELAXED))
       {
         recordButton();
       }
-      if (loop_play)
+      if (__atomic_load_n(&loop_play, __ATOMIC_RELAXED))
       {
         playButton();
       }
@@ -755,9 +758,9 @@ void updateDisplayTask(void *pvParameters)
 
       // setting tempo
       u8g2.setCursor(75, 30);
-      u8g2.print(40 + 15 * global_knob10);
+      u8g2.print(40 + 15 * __atomic_load_n(&global_knob10, __ATOMIC_RELAXED));
       // metronome square
-      if (metronomeBeep)
+      if (__atomic_load_n(&metronomeBeep, __ATOMIC_RELAXED))
       {
         metronomeDraw();
       }
@@ -794,16 +797,14 @@ void scanKeysTask(void *pvParameters)
       keyArray[i] = readCols();
       digitalWrite(REN_PIN, 0);
     }
-    xSemaphoreGive(keyArrayMutex);
 
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
 
     // loop buttons
     if (keyboardIndex == 1)
     {
-      loop_play = !(keyArray[5] & 1);
-      loop_record = !(keyArray[6] & 2);
+      __atomic_store_n(&loop_play, !(keyArray[5] & 1), __ATOMIC_RELAXED);
+      __atomic_store_n(&loop_record, !(keyArray[6] & 2), __ATOMIC_RELAXED);
     }
 
     // knob key matrices
@@ -822,24 +823,24 @@ void scanKeysTask(void *pvParameters)
     // assigning knobs appropriately for multiple keyboards
     if (keyboardIndex == 0)
     {
-      global_knob0 = local_knob0.get_rotation_atomic();
-      global_knob1 = local_knob1.get_rotation_atomic();
-      global_knob2 = local_knob2.get_rotation_atomic();
-      global_knob3 = local_knob3.get_rotation_atomic();
+      __atomic_store_n(&global_knob0, local_knob0.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob1, local_knob1.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob2, local_knob2.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob3, local_knob3.get_rotation_atomic(), __ATOMIC_RELAXED);
     }
     else if (keyboardIndex == 1)
     {
-      global_knob4 = local_knob0.get_rotation_atomic();
-      global_knob5 = local_knob1.get_rotation_atomic();
-      global_knob6 = local_knob2.get_rotation_atomic();
-      global_knob7 = local_knob3.get_rotation_atomic();
+      __atomic_store_n(&global_knob4, local_knob0.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob5, local_knob1.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob6, local_knob2.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob7, local_knob3.get_rotation_atomic(), __ATOMIC_RELAXED);
     }
     else
     {
-      global_knob8 = local_knob0.get_rotation_atomic();
-      global_knob9 = local_knob1.get_rotation_atomic();
-      global_knob10 = local_knob2.get_rotation_atomic();
-      global_knob11 = local_knob3.get_rotation_atomic();
+      __atomic_store_n(&global_knob8, local_knob0.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob9, local_knob1.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob10, local_knob2.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob11, local_knob3.get_rotation_atomic(), __ATOMIC_RELAXED);
     }
 
     // note_states represents a 12-bit state of all notes
@@ -920,7 +921,7 @@ void scanKeysTask(void *pvParameters)
     }
 
     // Further loop handling
-    if (loopPlaying && (keyboardIndex == 1))
+    if (__atomic_load_n(&loopPlaying, __ATOMIC_RELAXED) && (keyboardIndex == 1))
     {
       newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
       newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
@@ -961,7 +962,7 @@ void scanKeysTask(void *pvParameters)
 // Looping (play) task
 void playLoopTask(void *pvParameters)
 {
-  loopPlaying = false;
+  __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
 
   const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -973,9 +974,9 @@ void playLoopTask(void *pvParameters)
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    if (!loop_record)
+    if (!__atomic_load_n(&loop_record, __ATOMIC_RELAXED))
     {
-      button_pressed = loop_play;
+      button_pressed = __atomic_load_n(&loop_play, __ATOMIC_RELAXED);
     }
     else
     {
@@ -984,14 +985,14 @@ void playLoopTask(void *pvParameters)
     if (!button_pressed)
     {
       currentIndexPlaying = 0;
-      loopPlaying = false;
+      __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
     }
     else
     {
-      loopPlaying = true;
+      __atomic_store_n(&loopPlaying, true, __ATOMIC_RELAXED);
       loopIndex = currentIndexPlaying;
       currentIndexPlaying++;
-      if (currentIndexPlaying >= endLoopIndex)
+      if (currentIndexPlaying >= __atomic_load_n(&endLoopIndex, __ATOMIC_RELAXED))
       {
         currentIndexPlaying = 0;
       }
@@ -1009,13 +1010,14 @@ void recordLoopTask(void *pvParameters)
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    button_pressed = loop_record;
+    button_pressed = __atomic_load_n(&loop_record, __ATOMIC_RELAXED);
     if (!button_pressed)
     {
       currentIndexRecording = 0;
     }
     else
     {
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
       if (currentIndexRecording == 0)
       {
         for (int i = 0; i < 100; ++i)
@@ -1033,6 +1035,7 @@ void recordLoopTask(void *pvParameters)
         recorded_g_note_states[currentIndexRecording][2] = g_note_states[2];
         currentIndexRecording += 1;
       }
+      xSemaphoreGive(notesArrayMutex);
     }
   }
 }
@@ -1044,31 +1047,30 @@ void metronomeTask(void *pvParameters)
   {
     vTaskDelete(NULL);
   }
-  metronomeBeep = false;
+  __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
-  int numberOfCycles;
+  int numberOfCycles = 15;
   int currentCycle = 0;
-  numberOfCycles = 15;
   while (1)
   {
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    numberOfCycles = (600) / (40 + 15 * global_knob10);
+    numberOfCycles = (600) / (40 + 15 * __atomic_load_n(&global_knob10, __ATOMIC_RELAXED));
     if (0)
     {
       currentCycle = 0;
-      metronomeBeep = false;
+      __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
     }
     else
     {
       currentCycle += 1;
       if (currentCycle == numberOfCycles - 3)
       {
-        metronomeBeep = true;
+        __atomic_store_n(&metronomeBeep, true, __ATOMIC_RELAXED);
       }
       if (currentCycle >= numberOfCycles)
       {
-        metronomeBeep = false;
+        __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
         currentCycle = 0;
       }
     }
