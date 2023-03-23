@@ -26,7 +26,7 @@ where \tau_i is the initiation interval and $T_i$ is the execution time for task
 
 The CPU utilisation can be calculated through the following equation:
 
- $\Huge CPU Utilisation = \sum_{i=1}[\frac{\tau_i}{\T_i}]$
+ $\Huge CPU Utilisation = \sum_{i=1}[\frac{\tau_i}{T_i}]$
 
 The measured CPU utilisation under these tests was calculated using the results obtained in Section [## Minimum initiation interval and measured maximum execution time of each task]. The CPU Utilisation is x.
 
