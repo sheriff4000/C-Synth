@@ -295,7 +295,7 @@ void startEnvelopeTask(int noteIdx)
       "enveloper",       /* Text name for the task */
       256,               /* Stack size in words, not bytes */
       (void *)noteIdx,   /* Parameter passed into the task */
-      5,                 /* Task priority */
+      1,                 /* Task priority */
       &envelopeTask);    /* Pointer to store the task handle */
 }
 
@@ -577,7 +577,7 @@ void scanOtherBoardsTask(void *pvParameters)
         global_knob11 = tempknob3;
       }
 
-      if (loopPlaying)
+      if (loopPlaying && (keyboardIndex == 1))
       {
         newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
         newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
@@ -917,7 +917,7 @@ void scanKeysTask(void *pvParameters)
       }
     }
 
-    if (loopPlaying)
+    if (loopPlaying && (keyboardIndex == 1))
     {
       newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
       newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
@@ -1196,7 +1196,7 @@ void setup()
       "sampleGeneration",       /* Text name for the task */
       256,                      /* Stack size in words, not bytes */
       NULL,                     /* Parameter passed into the task */
-      9,                        /* Task priority */
+      8,                        /* Task priority */
       &sampleGenerationHandle); /* Pointer to store the task handle */
 
   // thread initialisation
@@ -1206,7 +1206,7 @@ void setup()
       "recordLoop",       /* Text name for the task */
       256,                /* Stack size in words, not bytes */
       NULL,               /* Parameter passed into the task */
-      2,                  /* Task priority */
+      1,                  /* Task priority */
       &loopRecordHandle); /* Pointer to store the task handle */
 
   // thread initialisation
@@ -1216,7 +1216,7 @@ void setup()
       "playLoop",   /* Text name for the task */
       256,          /* Stack size in words, not bytes */
       NULL,         /* Parameter passed into the task */
-      3,            /* Task priority */
+      2,            /* Task priority */
       &loopPlayHandle);
 
   TaskHandle_t scanKeysHandle = NULL;
@@ -1225,7 +1225,7 @@ void setup()
       "scanKeys",       /* Text name for the task */
       128,              /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      8,                /* Task priority */
+      7,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanOtherBoards = NULL;
@@ -1234,7 +1234,7 @@ void setup()
       "scanOtherBoards",   /* Text name for the task */
       64,                  /* Stack size in words, not bytes */
       NULL,                /* Parameter passed into the task */
-      7,                   /* Task priority */
+      6,                   /* Task priority */
       &scanKeysHandle);    /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -1243,7 +1243,7 @@ void setup()
       "updateDisplay",       /* Text name for the task */
       64,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      5,                     /* Task priority */
+      4,                     /* Task priority */
       &updateDisplayHandle); /* Pointer to store the task handle */
 
   TaskHandle_t setVibStep = NULL;
@@ -1252,7 +1252,7 @@ void setup()
       "setVibrato",   /* Text name for the task */
       64,             /* Stack size in words, not bytes */
       NULL,           /* Parameter passed into the task */
-      6,              /* Task priority */
+      5,              /* Task priority */
       &setVibStep);   /* Pointer to store the task handle */
 
   TaskHandle_t metronome = NULL;
@@ -1261,7 +1261,7 @@ void setup()
       "metronome",   /* Text name for the task */
       64,            /* Stack size in words, not bytes */
       NULL,          /* Parameter passed into the task */
-      4,             /* Task priority */
+      3,             /* Task priority */
       &metronome);   /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
