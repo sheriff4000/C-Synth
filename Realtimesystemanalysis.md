@@ -23,8 +23,7 @@
 ## Total CPU utilisation
 
 ## Shared data structures and methods used to guarantee safe access and synchronisation
-- Knob class
-
+ - The latency of the lowest-priority task ($t_n$) is 
 
 ## Analysis of inter-task dependencies that show any possibility of deadlock
 
