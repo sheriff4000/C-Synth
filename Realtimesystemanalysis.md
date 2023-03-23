@@ -18,7 +18,7 @@
 ## Critical analysis of rate monotonic scheduler
 Critical analysis can be performed to see if a specific schedule will work. The latency ($L_n$) of the lowest-priority task ($\tao_n$) is x at the worst-instance in time. The following formula can be used to calculate whether the schedule will work: 
 
-$\sum_{i=1}[\frac{\tao_n}{\tao_i}]\cdot T_n \le \tao_n
+$\sum_{i=1}[\frac{\tao_n}{\tao_i}]\cdot T_n \le \tao_n$
 
 ## Total CPU utilisation
 
