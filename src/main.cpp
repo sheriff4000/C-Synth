@@ -721,8 +721,8 @@ void updateDisplayTask(void *pvParameters)
       drawWaveform(knob2rotation);
 
       // note showing
-      u8g2.drawStr(80, 20, "Note"); // write something to the internal memory // make back to 30
-      // u8g2.drawStr(120, 30, notes[note]);
+      //u8g2.drawStr(80, 20, "Note"); // write something to the internal memory // make back to 30
+      u8g2.drawStr(60, 20, notes[note]);
 
       u8g2.setCursor(80, 30);
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
@@ -903,17 +903,20 @@ void scanKeysTask(void *pvParameters)
         // Serial.println("helloo");
         envActive[i] = true;
         startEnvelopeTask(i);
+        note = i;
       }
       if (!envActive[i + 12] && ((g_note_states[1] & (1 << i)) != 0))
       {
-        Serial.println("yes");
+        //Serial.println("yes");
         envActive[i + 12] = true;
         startEnvelopeTask(i + 12);
+        note = i;
       }
       if (!envActive[i + 24] && ((g_note_states[2] & (1 << i)) != 0))
       {
         envActive[i + 24] = true;
         startEnvelopeTask(i + 24);
+        note = i;
       }
     }
 
