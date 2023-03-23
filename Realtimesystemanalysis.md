@@ -27,7 +27,8 @@
 
 ## Analysis of inter-task dependencies that show any possibility of deadlock
 
-### sampleGenerationTask dependencies
+The following lists show the  dependencies on shared/global data structures for each task as well as how any deadlocks are avoided
+### sampleGenerationTask
     - Read
         - global knobs 0, 2, 3, 4 
         - bendStep 
@@ -35,7 +36,7 @@
         - keyboardIndex & numberOfKeyboards 
         - sampleBuffer 0 & 1 
         - noteMult 
-    the task only has read dependencies so
+    the task only has read dependencies so pre
 
 
 ### sampleISR
@@ -54,6 +55,7 @@
         - envActive 
         - g_note_ states 
         - global knobs 
+        - bendStep
 
 ### scanOtherBoardsTask
     - Read
