@@ -82,7 +82,7 @@ volatile int loopIndex;
 volatile int endLoopIndex;
 
 /// notes that are being played
-const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
+const char *notes[13] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B", " "};
 
 const char *knobTitles[12] = {"OCT", "NONE", "WAVE", "VOL", "PAN", "REC", "PLAY", "NONE", "ATTACK", "DECAY", "SUSTAIN", "NONE"};
 volatile uint8_t note;
@@ -779,6 +779,7 @@ void metronomeDraw()
 // Updating the display task
 void updateDisplayTask(void *pvParameters)
 {
+  int noteToDisplay;
   // Timing for the task
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -815,10 +816,19 @@ void updateDisplayTask(void *pvParameters)
 #else
       drawWaveform(knob2rotation);
 #endif
-
+    noteToDisplay = 12;
+    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+    int s = 1;
+    for(int i = 0; i < 12; i++){
+      if((g_note_states[0] & s) || (g_note_states[1] & s) || (g_note_states[2] & s) ){
+        note = i;
+      }
+      s <<= 1;
+    }
+    xSemaphoreGive(notesArrayMutex);
       // note showing
-      u8g2.drawStr(80, 30, "Note"); // write something to the internal memory // make back to 30
-      // u8g2.drawStr(120, 30, notes[note]);
+      //u8g2.drawStr(80, 30, "Note"); // write something to the internal memory // make back to 30
+      u8g2.drawStr(60, 20, notes[note]);
     }
     // Second keyboard display: Panning, Record(record loop), Play (play loop), Attack level
     else if (keyboardIndex == 1)
@@ -852,8 +862,8 @@ void updateDisplayTask(void *pvParameters)
       u8g2.drawStr(110, 10, "MET");
 
       // Knob levels for Decay/Sustain
-      uint8_t knob8rotation = __atomic_load_n(&global_knob8, __ATOMIC_RELAXED);
-      uint8_t knob9rotation = __atomic_load_n(&global_knob9, __ATOMIC_RELAXED);
+      uint8_t knob8rotation = local_knob0.get_rotation();
+      uint8_t knob9rotation = local_knob1.get_rotation();
       drawKnobLevel(5, knob8rotation);
       drawKnobLevel(40, knob9rotation);
 
@@ -1456,12 +1466,16 @@ void setup()
 
   // setting local knob limits
   local_knob3.set_limits(0, 8);
-  local_knob2.set_limits(0, 3);
+  
   local_knob1.set_limits(0, 8);
-  if (keyboardIndex == 0)
+  if (keyboardIndex == 0){
     local_knob0.set_limits(-3, 3);
-  else
+    local_knob2.set_limits(0, 3);
+  }
+  else{
     local_knob0.set_limits(0, 8);
+    local_knob2.set_limits(0, 8);
+  }
 
 #ifdef TEST_SETVIBSTEPTASK
   uint32_t startTime = micros();
