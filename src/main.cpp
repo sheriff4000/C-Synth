@@ -65,7 +65,7 @@ volatile uint32_t bendStep;
 // local knobs
 Knob local_knob0, local_knob1, local_knob2, local_knob3;
 
-//global knobs
+// global knobs
 volatile int8_t global_knob0 = 0;
 volatile int8_t global_knob1 = 0;
 volatile int8_t global_knob2 = 0;
@@ -418,23 +418,25 @@ void scanOtherBoardsTask(void *pvParameters)
       {
         g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
         int8_t tempknob0, tempknob1, tempknob2, tempknob3;
-        
+
         tempknob0 = RX_Message[4];
         tempknob1 = RX_Message[5];
         tempknob2 = RX_Message[6];
         tempknob3 = RX_Message[7];
-        
-        if(RX_Message[0] == 1){
+
+        if (RX_Message[0] == 1)
+        {
           global_knob4 = tempknob0;
           global_knob5 = tempknob1;
           global_knob6 = tempknob2;
           global_knob7 = tempknob3;
         }
-        else{
+        else
+        {
           global_knob8 = tempknob0;
           global_knob9 = tempknob1;
           global_knob10 = tempknob2;
-          global_knob11 = tempknob3;          
+          global_knob11 = tempknob3;
         }
       }
       else
@@ -502,7 +504,7 @@ void updateDisplayTask(void *pvParameters)
   // infinite loop for this task
   while (1)
   {
-   vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
 
     // Update display
     u8g2.clearBuffer();                   // clear the internal memory
@@ -540,22 +542,22 @@ void updateDisplayTask(void *pvParameters)
 
       // note showing
       // u8g2.drawStr(2, 30, notes[note]);
-    }else if(keyboardIndex == 1 || keyboardIndex == 2){
-      u8g2.drawStr(5,10,"VOL");
-      u8g2.drawStr(40,10,"VOL");
-      u8g2.drawStr(75,10,"VOL");
-      u8g2.drawStr(110,10,"VOL");
-      u8g2.setCursor(5,20);
-      u8g2.print(local_knob0.get_rotation_atomic(),DEC);
-      u8g2.setCursor(40,20);
-      u8g2.print(local_knob1.get_rotation_atomic(),DEC);
-      u8g2.setCursor(75,20);
-      u8g2.print(local_knob2.get_rotation_atomic(),DEC);
-      u8g2.setCursor(110,20);
-      u8g2.print(local_knob3.get_rotation_atomic(),DEC);
     }
-
-    
+    else if (keyboardIndex == 1 || keyboardIndex == 2)
+    {
+      u8g2.drawStr(5, 10, "VOL");
+      u8g2.drawStr(40, 10, "VOL");
+      u8g2.drawStr(75, 10, "VOL");
+      u8g2.drawStr(110, 10, "VOL");
+      u8g2.setCursor(5, 20);
+      u8g2.print(local_knob0.get_rotation_atomic(), DEC);
+      u8g2.setCursor(40, 20);
+      u8g2.print(local_knob1.get_rotation_atomic(), DEC);
+      u8g2.setCursor(75, 20);
+      u8g2.print(local_knob2.get_rotation_atomic(), DEC);
+      u8g2.setCursor(110, 20);
+      u8g2.print(local_knob3.get_rotation_atomic(), DEC);
+    }
 
     // direction of rotation
     u8g2.sendBuffer(); // transfer internal memory to the display
@@ -593,8 +595,7 @@ void scanKeysTask(void *pvParameters)
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
 
-
-    //knob key matrices
+    // knob key matrices
     knob3keymatrix = keyArray[3] & 0x03;
     knob2keymatrix = (keyArray[3] & 0x0C) >> 2;
     knob1keymatrix = keyArray[4] & 0x03;
@@ -647,7 +648,6 @@ void scanKeysTask(void *pvParameters)
     }
 
     // Put in mutex?
-   
 
     __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
@@ -830,7 +830,6 @@ void setup()
   sampleTimer->attachInterrupt(sampleISR);
   sampleTimer->resume();
 
-
   // Initialise CAN
   CAN_Init(false);
   setCANFilter(0x123, 0x7ff);
@@ -840,12 +839,15 @@ void setup()
   local_knob3.set_limits(0, 8);
   local_knob2.set_limits(0, 8);
   local_knob1.set_limits(0, 8);
-  if(keyboardIndex == 0){
-    local_knob0.set_limits(-3,3);
-  }else{
-    local_knob0.set_limits(0,8);
+
+  if (keyboardIndex == 0)
+  {
+    local_knob0.set_limits(-3, 3);
   }
-  
+  else
+  {
+    local_knob0.set_limits(0, 8);
+  }
   Serial.println("finished handshaking");
   vTaskStartScheduler();
 }
