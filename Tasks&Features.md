@@ -23,6 +23,21 @@
 
 ## Tasks (thread/interrupt)
 
+Overview: 
+
+|         Task         | Interrupt/Thread | Priority | Stack size |
+|:--------------------:|------------------|:--------:|------------|
+| sampleGenerationTask | Thread           |     8    | 256        |
+|     scanKeysTask     | Thread           |     7    | 128        |
+| scanOtherBoards      | Thread           | 6        | 64         |
+| setVibStepTask       | Thread           | 5        | 64         |
+|   updateDisplayTask  | Thread           |     4    | 64         |
+| metronomeTask        | Thread           | 3        | 64         |
+| playLoopTask         | Thread           | 2        | 256        |
+|    recordLoopTask    | Thread           |     1    | 256        |
+| startEnvelopeTask    | Thread           | 1        | 256        |
+|       sampleISR      | Interrupt        |  22000Hz |            |
+
 ******sampleGenerationTask******
 
 This task takes the current state of each key, as well as all of the values of the current knobs and uses these values to generate the Vout values. These values are written into a buffer called sampleBuffer This task is implemented using a thread. This task has the highest priority of all other tasks, as it has the highest frequency and the task of producing sound is the most important feature of the synthesiser.
@@ -49,4 +64,6 @@ This task uses CAN to check for messages sent from other boards in the keyboard.
 
 **************************setVibStepTask**************************
 
-This task constantly scans the joystick to calculate an offset (added to the step size of the accumulator) that varies sinusoidally. 
+This task constantly scans the joystick to calculate an offset (added to the step size of the accumulator) that varies sinusoidally.
+
+**************************metronomeTask**************************
