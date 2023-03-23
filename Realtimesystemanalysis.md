@@ -15,49 +15,78 @@
 
 ## Analysis of inter-task dependencies that show any possibility of deadlock
 
-- sampleGenerationTask dependencies
-    - global knobs 0, 2, 3, 4
-    - bendStep
-    - vibStep
-    - keyboardIndex & numberOfKeyboards
-    - sampleBuffer 0 & 1
+### sampleGenerationTask dependencies
+    - Read
+        - global knobs 0, 2, 3, 4 
+        - bendStep 
+        - vibStep 
+        - keyboardIndex & numberOfKeyboards 
+        - sampleBuffer 0 & 1 
+        - noteMult 
+    the task only has read dependencies so
 
 
-- sampleISR - interrupt dependencies
-    - sampleBuffer 0 and 1
+### sampleISR
+    - Read
+        - sampleBuffer 0 and 1 
+    
 
-- scanKeysTask
-    - g_note_ states
-    - global knobs
-    - recorded_g_note_states
-    - keyboardIndex
-    - envActive
-    - loopPlaying
+### scanKeysTask
+    - Read
+        - recorded_g_note_states 
+        - keyboardIndex 
+        - envActive 
+        - loopPlaying 
+        - loopIndex 
+    - Write 
+        - envActive 
+        - g_note_ states 
+        - global knobs 
 
-- scanOtherBoardsTask
-    - loop_record and loop_play
-    - global knobs
-    - loopPlaying
-    - recorded_g_note_states
-    - g_note_ states
-    - envActive
+### scanOtherBoardsTask
+    - Read
+        - loop_record and loop_play 
+        - loopPlaying 
+        - recorded_g_note_states 
+        - loopIndex 
+        - envActive
+    - Write
+        - global knobs 
+        - g_note_ states 
+        - envActive
 
-- updateDisplayTask
-    - keyboardIndex
-    - global knobs
-    - loop_record and loop_play
+### updateDisplayTask
+    - Read
+        - keyboardIndex 
+        - global knobs 
+        - loop_record and loop_play 
 
-- recordLoopTask
-    - recorded_g_note_states
-    - g_note_states
-- playLoopTask
-    - loopPlaying
-    - loop_record and loop_play
-    - loopIndex
+### recordLoopTask
+    - Read
+        - g_note_states 
+        - loop_record 
+    - Write
+        - recorded_g_note_states 
 
-- setVibStepTask
-    -  vibStep
+### playLoopTask 
+    - Read
+        - loop_record and loop_play 
+    - Write
+        - loopPlaying 
+        - loopIndex 
 
-- metronomeTask
-    - metronomeBeep
+### setVibStepTask
+    - Write
+        - vibStep 
+
+### metronomeTask
+    - Write
+        - metronomeBeep 
+### keyPressExecution
+    - Read
+        - global knobs 
+        - g_note_states 
+    - Write
+        - envActive 
+        - noteMult 
 
