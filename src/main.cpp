@@ -69,6 +69,8 @@ volatile int loopIndex;
 volatile int endLoopIndex;
 
 const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
+
+const char *knobTitles[12] = {"OCT", "NONE", "WAVE", "VOL", "PAN", "REC", "PLAY", "NONE", "ATTACK", "DECAY", "SUSTAIN", "NONE"};
 volatile uint8_t note;
 volatile uint32_t global_Vout;
 
@@ -202,12 +204,12 @@ void keyPressExecution(void * pvParameters) {
   //Serial.println("entering/task stuff works");
   uint8_t noteIdx = (int)pvParameters;
   envActive[noteIdx] = true;
-  //uint32_t attack = 100 * global_knob4;
-  uint32_t attack = 0;
-  //uint32_t decay = 50 * global_knob5;
-  uint32_t decay = 100 * 5;
-  // float sustain = global_knob6/8;
-  float sustain = 5./8.;
+  uint32_t attack = 100 * global_knob7;
+  //uint32_t attack = 0;
+  uint32_t decay = 50 * global_knob8;
+  //uint32_t decay = 100 * 5;
+  float sustain = (float)global_knob9/8.;
+  //float sustain = 5./8.;
   uint32_t release = 100 * 50;
   float voutMult = 0.0;
   int startTime = millis();
@@ -528,7 +530,7 @@ void scanOtherBoardsTask(void *pvParameters)
      
       g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
       int8_t tempknob0, tempknob1, tempknob2, tempknob3;
-      if(keyboardIndex != 0){
+      if(keyboardIndex != 1){
         loop_record = RX_Message[6];
         loop_play = RX_Message[7];
       }
@@ -652,6 +654,10 @@ void drawWaveform(uint8_t knob2rotation)
   }
 }
 
+void recordButton(){
+  u8g2.DrawCircle()
+}
+
 void updateDisplayTask(void *pvParameters)
 {
   // Timing for the task
@@ -698,27 +704,33 @@ void updateDisplayTask(void *pvParameters)
 
       // note showing
       // u8g2.drawStr(2, 30, notes[note]);
-    }else if(keyboardIndex == 1 || keyboardIndex == 2){
-      u8g2.drawStr(5,10,"VOL");
-      u8g2.setCursor(30,10);
-      u8g2.print(global_knob4, DEC);
-      // u8g2.drawStr(40,10,"VOL");
-      // u8g2.drawStr(75,10,"VOL");
-      // u8g2.drawStr(110,10,"VOL");
-      // if(keyboardIndex ==1){
-      //   drawKnobLevel(5, global_knob4);
-      //   drawKnobLevel(40, global_knob5);
-      //   drawKnobLevel(75, global_knob6);
-      //   drawKnobLevel(110, global_knob7);
-      // }
-      // else{
-      //   drawKnobLevel(5, global_knob8);
-      //   drawKnobLevel(40, global_knob9);
-      //   drawKnobLevel(75, global_knob10);
-      //   drawKnobLevel(110, global_knob11);
-      // 
-      //Serial.println(g_note_states[0]);
-      u8g2.print(g_note_states[0], BIN);
+    }else if(keyboardIndex == 1){
+      u8g2.drawStr(5,10,"PAN");;
+      u8g2.drawStr(40,10,"REC");
+      u8g2.drawStr(75,10,"PLAY");
+      u8g2.drawStr(110,10,"ATK");
+      
+      drawKnobLevel(5, global_knob4);
+      if(loop_record){
+          drawKnobLevel(40, 3);
+      }
+      if(loop_play){
+        drawKnobLevel(75, 3);
+      }
+ 
+      
+    }
+    else{
+      u8g2.drawStr(5,10,"ATK");;
+      u8g2.drawStr(40,10,"DEC");
+      u8g2.drawStr(75,10,"SUS");
+      u8g2.drawStr(110,10,"NONE");
+      
+      drawKnobLevel(5, global_knob8);
+      drawKnobLevel(40, global_knob9);
+      drawKnobLevel(75, global_knob10);
+      drawKnobLevel(110, global_knob11);
+      
     }
 
 
@@ -760,9 +772,9 @@ void scanKeysTask(void *pvParameters)
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
 
     //loop buttons
-    if(keyboardIndex == 0){
-      loop_record = !(keyArray[6] & 1);
-      loop_play = !(keyArray[6] & 2);
+    if(keyboardIndex == 1){
+      loop_play = !(keyArray[5] & 1);
+      loop_record = !(keyArray[6] & 2);
     }
     
     //knob key matrices
@@ -828,7 +840,7 @@ void scanKeysTask(void *pvParameters)
     temp_knob3 = local_knob3.get_rotation_atomic();
     TX_Message[4] = ((temp_knob1 & 0xf) << 4) + (temp_knob0 & 0xf);
     TX_Message[5] = ((temp_knob3 & 0xf) << 4) + (temp_knob2 & 0xf);
-    if(keyboardIndex == 0){
+    if(keyboardIndex == 1){
       TX_Message[6] = loop_record;
       TX_Message[7] = loop_play;
     }
