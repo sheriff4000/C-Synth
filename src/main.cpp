@@ -77,6 +77,10 @@ volatile uint32_t global_Vout;
 // bendy bendy
 volatile uint32_t bendStep;
 
+// metronomey
+volatile bool metronomeActivated;
+volatile bool metronomeBeep;
+
 // vibby vibby
 volatile float vibFactor;
 volatile int32_t vibStep;
@@ -208,8 +212,8 @@ void keyPressExecution(void * pvParameters) {
   //uint32_t attack = 0;
   uint32_t decay = 50 * global_knob8;
   //uint32_t decay = 100 * 5;
-  float sustain = (float)global_knob9/8.;
-  //float sustain = 5./8.;
+  //float sustain = (float)global_knob9/8.;
+  float sustain = 1;
   uint32_t release = 100 * 50;
   float voutMult = 0.0;
   int startTime = millis();
@@ -500,7 +504,6 @@ void sampleGenerationTask(void *pvParameters)
           Vout = Vout *pan;
         }
       }
-
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
       else
@@ -655,7 +658,16 @@ void drawWaveform(uint8_t knob2rotation)
 }
 
 void recordButton(){
-  u8g2.DrawCircle()
+  u8g2.drawCircle(47, 22,5);
+  u8g2.drawFilledEllipse(47, 22, 2.5, 2.5);
+}
+
+void playButton(){
+  u8g2.drawTriangle(80, 25, 80,15,85, 20);
+}
+
+void metronome(){
+  u8g2.drawBox(115,22.5, 10, 10);
 }
 
 void updateDisplayTask(void *pvParameters)
@@ -702,8 +714,7 @@ void updateDisplayTask(void *pvParameters)
       u8g2.print(global_knob4, DEC);
       xSemaphoreGive(notesArrayMutex);
 
-      // note showing
-      // u8g2.drawStr(2, 30, notes[note]);
+    // note showing
     }else if(keyboardIndex == 1){
       u8g2.drawStr(5,10,"PAN");;
       u8g2.drawStr(40,10,"REC");
@@ -711,26 +722,30 @@ void updateDisplayTask(void *pvParameters)
       u8g2.drawStr(110,10,"ATK");
       
       drawKnobLevel(5, global_knob4);
+      drawKnobLevel(110, global_knob7);      
       if(loop_record){
-          drawKnobLevel(40, 3);
+          recordButton();
       }
       if(loop_play){
-        drawKnobLevel(75, 3);
+        playButton();
       }
  
       
     }
     else{
-      u8g2.drawStr(5,10,"ATK");;
-      u8g2.drawStr(40,10,"DEC");
-      u8g2.drawStr(75,10,"SUS");
-      u8g2.drawStr(110,10,"NONE");
+      u8g2.drawStr(5,10,"DEC");
+      u8g2.drawStr(40,10,"SUS");
+      u8g2.drawStr(75,10,"TMP");
+      u8g2.drawStr(110,10,"MET");
       
       drawKnobLevel(5, global_knob8);
       drawKnobLevel(40, global_knob9);
-      drawKnobLevel(75, global_knob10);
-      drawKnobLevel(110, global_knob11);
-      
+
+      // setting tempo
+      u8g2.setCursor(75,30);
+      u8g2.print(global_knob10);
+      // metronome square
+      metronome();      
     }
 
 
@@ -985,7 +1000,36 @@ void recordLoopTask(void *pvParameters){
     }
   }
 }
-
+//137290
+void metronomeTask(void *pvParameters){
+  if(keyboardIndex != 0){
+     vTaskDelete(NULL);
+  }
+  metronomeBeep = false;
+  const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  int numberOfCycles;
+  int currentCycle = 0;
+  numberOfCycles = 15;
+  while (1){
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    if(0){
+      currentCycle = 0;
+      metronomeBeep = false;
+    }
+    else{
+      currentCycle += 1;
+      if(currentCycle == numberOfCycles-3){
+        metronomeBeep = true;
+        //Serial.println("beeep");
+      }
+      if(currentCycle >= numberOfCycles){
+        metronomeBeep = false;
+        currentCycle = 0;
+      }
+    }
+  }
+}
 
 void handShake()
 {
@@ -1115,7 +1159,7 @@ void setup()
       "sampleGeneration",       /* Text name for the task */
       256,                      /* Stack size in words, not bytes */
       NULL,                     /* Parameter passed into the task */
-      7,                        /* Task priority */
+      8,                        /* Task priority */
       &sampleGenerationHandle); /* Pointer to store the task handle */
 
 
@@ -1149,7 +1193,7 @@ void setup()
       "scanKeys",       /* Text name for the task */
       128,               /* Stack size in words, not bytes */
       NULL,             /* Parameter passed into the task */
-      6,                /* Task priority */
+      7,                /* Task priority */
       &scanKeysHandle); /* Pointer to store the task handle */
 
   TaskHandle_t scanOtherBoards = NULL;
@@ -1158,7 +1202,7 @@ void setup()
       "scanOtherBoards",   /* Text name for the task */
       64,                  /* Stack size in words, not bytes */
       NULL,                /* Parameter passed into the task */
-      5,                   /* Task priority */
+      6,                   /* Task priority */
       &scanKeysHandle);    /* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -1167,7 +1211,7 @@ void setup()
       "updateDisplay",       /* Text name for the task */
       64,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      3,                     /* Task priority */
+      4,                     /* Task priority */
       &updateDisplayHandle); /* Pointer to store the task handle */
 
   TaskHandle_t setVibStep = NULL;
@@ -1176,8 +1220,18 @@ void setup()
       "setVibrato",       /* Text name for the task */
       64,                    /* Stack size in words, not bytes */
       NULL,                  /* Parameter passed into the task */
-      4,                     /* Task priority */
+      5,                     /* Task priority */
       &setVibStep); /* Pointer to store the task handle */
+
+  
+  TaskHandle_t metronome = NULL;
+  xTaskCreate(
+      metronomeTask,     /* Function that implements the task */
+      "metronome",       /* Text name for the task */
+      64,                    /* Stack size in words, not bytes */
+      NULL,                  /* Parameter passed into the task */
+      3,                     /* Task priority */
+      &metronome); /* Pointer to store the task handle */
 
   keyArrayMutex = xSemaphoreCreateMutex();
   notesArrayMutex = xSemaphoreCreateMutex();
