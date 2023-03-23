@@ -67,9 +67,6 @@ This function takes the Vout values written into the sampleBuffer and writes the
 keyPressExecution is activated in order for a note to be played, it increments and decrements a multiplier used to set the amplitude of a note's signal.
 
 
-
-
-
 **************************recordLoopTask**************************
 
 This task is used for our looping function - an advanced feature. Once global knob 5 is being held, the task stores the value of each key every 50ms, and stores these note states in a 2D array. This allows a sequence of notes being played to be stored, able to be played back in the playLoopTask.
