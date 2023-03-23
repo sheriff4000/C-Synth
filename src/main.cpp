@@ -4,6 +4,19 @@
 #include "../include/knob.hh"
 #include <ES_CAN.h>
 
+// #define DISABLE_THREADS 1
+// #define DISABLE_ISRs 1
+
+// #define TEST_SETVIBSTEPTASK 1
+// #define TEST_SAMPLEGENERATIONTASK 1
+// #define TEST_SCANOTHERBOARDSTASK 1
+// #define TEST_UPDATEDISPLAYTASK 1
+// #define TEST_SCANKEYSTASK 1
+// #define TEST_PLAYLOOPTASK 1
+// #define TEST_RECORDLOOPTASK 1
+// #define TEST_METRONOMETASK 1
+// #define TEST_SAMPLEISR
+
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
 SemaphoreHandle_t notesArrayMutex;
@@ -157,12 +170,23 @@ void setVibStepTask(void *pvParameters)
   float t;
   float freq;
   float tempVibStep;
+
   while (1)
   {
+
+// skip if testing so that task doesn't block
+#ifndef TEST_SETVIBSTEPTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
     joyChange = 512 - analogRead(JOYY_PIN);
     abs_joyChange = (joyChange < 0) ? -1.0 * joyChange : joyChange;
+
+#ifndef TEST_SETVIBSTEPTASK
     if (abs_joyChange < 100)
+#else
+    if (0)
+#endif
     {
       __atomic_store_n(&vibStep, 0, __ATOMIC_RELAXED);
       continue;
@@ -180,6 +204,10 @@ void setVibStepTask(void *pvParameters)
       i = 0;
     }
     i++;
+
+#ifdef TEST_SETVIBSTEPTASK
+    break;
+#endif
   }
 }
 
@@ -189,7 +217,6 @@ void keyPressExecution(void *pvParameters)
   uint8_t noteIdx = (int)pvParameters;
 
   // Envelope parameters
-
   uint32_t attack = 100 * __atomic_load_n(&global_knob7, __ATOMIC_RELAXED);
   uint32_t decay = 50 * __atomic_load_n(&global_knob8, __ATOMIC_RELAXED);
   float sustain = 1;
@@ -277,11 +304,17 @@ void sampleISR()
 {
   static uint32_t readCtr = 0;
 
+#ifndef TEST_SAMPLEISR
   if (readCtr == SAMPLE_BUFFER_SIZE)
+#else
+  if (1)
+#endif
   {
     readCtr = 0;
     writeBuffer1 = !writeBuffer1;
+#ifndef TEST_SAMPLEISR
     xSemaphoreGiveFromISR(sampleBufferSemaphore, NULL);
+#endif
   }
 
   if (writeBuffer1)
@@ -293,8 +326,6 @@ void sampleISR()
 // Generating sound task
 void sampleGenerationTask(void *pvParameters)
 {
-  // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
-
   // Sine wave phases
   uint32_t lower_phases0[12] = {0};
   uint32_t middle_phases0[12] = {0};
@@ -319,9 +350,12 @@ void sampleGenerationTask(void *pvParameters)
   uint8_t volume;
   float pan;
   int32_t Vout;
+
   while (1)
   {
+#ifndef TEST_SAMPLEGENERATIONTASK
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
+#endif
 
     // Adding to the buffer
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++)
@@ -343,28 +377,44 @@ void sampleGenerationTask(void *pvParameters)
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
       ss = g_ss;
 
-      // sine wave
+// sine wave
+#ifndef TEST_SAMPLEGENERATIONTASK
       if (wave_type == 0)
+#else
+      if (1)
+#endif
       {
         float_t angle;
         for (int i = 0; i < 12; ++i)
         {
-          // Lower keyboard
+// Lower keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
           if (ss & 1)
+#else
+          if (1)
+#endif
           {
             lower_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift)))) + stepOffset;
             Vout += (sin_lut[lower_phases0[i] >> 22]) * 128 * (float)noteMult[i];
           }
 
-          // Middle keyboard
+// Middle keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
           if (ss & 0x1000)
+#else
+          if (1)
+#endif
           {
             middle_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)))) + stepOffset;
             Vout += sin_lut[middle_phases0[i] >> 22] * 128 * (float)noteMult[i + 12];
           }
 
-          // Upper keyboard
+// Upper keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
           if (ss & 0x1000000)
+#else
+          if (1)
+#endif
           {
             upper_phases3[i] += ((pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift)))) + stepOffset;
             Vout += sin_lut[upper_phases0[i] >> 22] * 128 * (float)noteMult[i + 24];
@@ -478,9 +528,13 @@ void sampleGenerationTask(void *pvParameters)
         Vout = -128;
       }
 
-      // Panning (sound moving to/from different keyboard speaker)
-      // Only applicable for more than 1 keyboard
+// Panning (sound moving to/from different keyboard speaker)
+// Only applicable for more than 1 keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
       if (numberOfKeyboards == 2)
+#else
+      if (1)
+#endif
       {
         if (keyboardIndex == 0)
         {
@@ -491,7 +545,12 @@ void sampleGenerationTask(void *pvParameters)
           Vout = Vout * pan;
         }
       }
+
+#ifndef TEST_SAMPLEGENERATIONTASK
       if (numberOfKeyboards == 3)
+#else
+      if (0)
+#endif
       {
         if (keyboardIndex == 0)
         {
@@ -509,24 +568,35 @@ void sampleGenerationTask(void *pvParameters)
       else
         sampleBuffer0[writeCtr] = Vout + 128;
     }
+
+#ifdef TEST_SAMPLEGENERATIONTASK
+    break;
+#endif
   }
 }
 
 // CAN stuff
 void scanOtherBoardsTask(void *pvParameters)
 {
-  // CAN Message Variables
-  uint32_t ID;
-  uint8_t RX_Message[8] = {0};
-
   // Timing for the task
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
+  // CAN Message Variables
+  uint32_t ID;
+  uint8_t RX_Message[8] = {0};
+
   while (1)
   {
+#ifndef TEST_SCANOTHERBOARDSTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
+#ifndef TEST_SCANOTHERBOARDSTASK
     while (CAN_CheckRXLevel())
+#else
+    if (1)
+#endif
     {
       CAN_RX(ID, RX_Message);
       uint16_t newNotes0, newNotes1, newNotes2;
@@ -537,8 +607,8 @@ void scanOtherBoardsTask(void *pvParameters)
       // Sending looping message to other boards
       if (keyboardIndex != 1)
       {
-        loop_record = RX_Message[6];
-        loop_play = RX_Message[7];
+        __atomic_store_n(&loop_record, RX_Message[6], __ATOMIC_RELAXED);
+        __atomic_store_n(&loop_play, RX_Message[7], __ATOMIC_RELAXED);
       }
       xSemaphoreGive(notesArrayMutex);
 
@@ -573,7 +643,12 @@ void scanOtherBoardsTask(void *pvParameters)
 
       // Loop running
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+
+#ifndef TEST_SCANOTHERBOARDSTASK
       if (loopPlaying && (keyboardIndex == 1))
+#else
+      if (1)
+#endif
       {
         newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
         newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
@@ -582,18 +657,30 @@ void scanOtherBoardsTask(void *pvParameters)
         int s = 1;
         for (int i = 0; i < 12; i++)
         {
-
+#ifndef TEST_SCANOTHERBOARDSTASK
           if ((newNotes0 & s) != 0)
+#else
+          if (1)
+#endif
           {
             envActive[i] = true;
             startEnvelopeTask(i);
           }
+
+#ifndef TEST_SCANOTHERBOARDSTASK
           if ((newNotes1 & s) != 0)
+#else
+          if (1)
+#endif
           {
             envActive[i + 12] = true;
             startEnvelopeTask(i + 12);
           }
+#ifndef TEST_SCANOTHERBOARDSTASK
           if ((newNotes2 & s) != 0)
+#else
+          if (1)
+#endif
           {
             envActive[i + 24] = true;
             startEnvelopeTask(i + 24);
@@ -607,6 +694,10 @@ void scanOtherBoardsTask(void *pvParameters)
       }
       xSemaphoreGive(notesArrayMutex);
     }
+
+#ifdef TEST_SCANOTHERBOARDSTASK
+    break;
+#endif
   }
 }
 
@@ -694,14 +785,20 @@ void updateDisplayTask(void *pvParameters)
   // infinite loop for this task
   while (1)
   {
+#ifndef TEST_UPDATEDISPLAYTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
 
     // Update display
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_profont10_tf);
 
-    // First keyboard display: Wavetype, volume, notepressed
+// First keyboard display: Wavetype, volume, notepressed
+#ifndef TEST_UPDATEDISPLAYTASK
     if (keyboardIndex == 0)
+#else
+    if (1)
+#endif
     {
       uint8_t knob3rotation = __atomic_load_n(&global_knob3, __ATOMIC_RELAXED);
       uint8_t knob2rotation = __atomic_load_n(&global_knob2, __ATOMIC_RELAXED);
@@ -713,7 +810,11 @@ void updateDisplayTask(void *pvParameters)
 
       // Knob 2 (waveform)
       u8g2.drawStr(5, 10, "Waveform"); // write something to the internal memory
+#ifdef TEST_UPDATEDISPLAYTASK
+      drawWaveform(0); // sine waveform
+#else
       drawWaveform(knob2rotation);
+#endif
 
       // note showing
       u8g2.drawStr(80, 30, "Note"); // write something to the internal memory // make back to 30
@@ -769,6 +870,10 @@ void updateDisplayTask(void *pvParameters)
 
     // Toggle LED
     digitalToggle(LED_BUILTIN);
+
+#ifdef TEST_UPDATEDISPLAYTASK
+    break;
+#endif
   }
 }
 
@@ -783,9 +888,12 @@ void scanKeysTask(void *pvParameters)
   uint16_t toAnd, keys;
   bool pressed;
   uint8_t TX_Message[8] = {0};
+
   while (1)
   {
+#ifndef TEST_SCANKEYSTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
 
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
@@ -800,8 +908,11 @@ void scanKeysTask(void *pvParameters)
 
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
 
-    // loop buttons
+#ifndef TEST_SCANKEYSTASK
     if (keyboardIndex == 1)
+#else
+    if (1)
+#endif
     {
       __atomic_store_n(&loop_play, !(keyArray[5] & 1), __ATOMIC_RELAXED);
       __atomic_store_n(&loop_record, !(keyArray[6] & 2), __ATOMIC_RELAXED);
@@ -850,7 +961,11 @@ void scanKeysTask(void *pvParameters)
 
     for (int i = 0; i < 12; ++i)
     {
+#ifndef TEST_SCANKEYSTASK
       if (!((keys & toAnd) & 0xfff))
+#else
+      if (1)
+#endif
       {
         // note pressed
         note_states += toAnd;
@@ -879,13 +994,22 @@ void scanKeysTask(void *pvParameters)
     TX_Message[4] = ((temp_knob1 & 0xf) << 4) + (temp_knob0 & 0xf);
     TX_Message[5] = ((temp_knob3 & 0xf) << 4) + (temp_knob2 & 0xf);
 
-    // Sending loop information
+// Sending loop information
+#ifndef TEST_SCANKEYSTASK
     if (keyboardIndex == 1)
+#else
+    if (1)
+#endif
     {
-      TX_Message[6] = loop_record;
-      TX_Message[7] = loop_play;
+      TX_Message[6] = __atomic_load_n(&loop_record, __ATOMIC_RELAXED);
+      TX_Message[7] = __atomic_load_n(&loop_play, __ATOMIC_RELAXED);
     }
+
+#ifndef TEST_SCANKEYSTASK
     if (numberOfKeyboards > 1)
+#else
+    if (1)
+#endif
     {
       CAN_TX(0x123, TX_Message);
     }
@@ -900,28 +1024,46 @@ void scanKeysTask(void *pvParameters)
     // Envelope handling
     for (int i = 0; i < 12; i++)
     {
-      // Lower board envelope
+// Lower board envelope
+#ifndef TEST_SCANKEYSTASK
       if (!envActive[i] && ((g_note_states[0] & (1 << i)) != 0))
+#else
+      if (1)
+#endif
       {
         envActive[i] = true;
         startEnvelopeTask(i);
       }
-      // Middle board envelope
+
+// Middle board envelope
+#ifndef TEST_SCANKEYSTASK
       if (!envActive[i + 12] && ((g_note_states[1] & (1 << i)) != 0))
+#else
+      if (1)
+#endif
       {
         envActive[i + 12] = true;
         startEnvelopeTask(i + 12);
       }
-      // Upper board envelope
+
+// Upper board envelope
+#ifndef TEST_SCANKEYSTASK
       if (!envActive[i + 24] && ((g_note_states[2] & (1 << i)) != 0))
+#else
+      if (1)
+#endif
       {
         envActive[i + 24] = true;
         startEnvelopeTask(i + 24);
       }
     }
 
-    // Further loop handling
+// Further loop handling
+#ifndef TEST_SCANKEYSTASK
     if (__atomic_load_n(&loopPlaying, __ATOMIC_RELAXED) && (keyboardIndex == 1))
+#else
+    if (1)
+#endif
     {
       newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
       newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
@@ -930,24 +1072,38 @@ void scanKeysTask(void *pvParameters)
       int s = 1;
       for (int i = 0; i < 12; i++)
       {
-
+#ifndef TEST_SCANKEYSTASK
         if ((newNotes0 & s) != 0)
+#else
+        if (1)
+#endif
         {
           envActive[i] = true;
           startEnvelopeTask(i);
         }
+
+#ifndef TEST_SCANKEYSTASK
         if ((newNotes1 & s) != 0)
+#else
+        if (1)
+#endif
         {
           envActive[i + 12] = true;
           startEnvelopeTask(i + 12);
         }
+
+#ifndef TEST_SCANKEYSTASK
         if ((newNotes2 & s) != 0)
+#else
+        if (1)
+#endif
         {
           envActive[i + 24] = true;
           startEnvelopeTask(i + 24);
         }
         s <<= 1;
       }
+
       g_note_states[0] |= recorded_g_note_states[loopIndex][0];
       g_note_states[1] |= recorded_g_note_states[loopIndex][1];
       g_note_states[2] |= recorded_g_note_states[loopIndex][2];
@@ -956,16 +1112,20 @@ void scanKeysTask(void *pvParameters)
     g_ss = (uint64_t)g_note_states[0] + ((uint64_t)g_note_states[1] << 12) + ((uint64_t)g_note_states[2] << 24);
 
     xSemaphoreGive(notesArrayMutex);
+
+#ifdef TEST_SCANKEYSTASK
+    break;
+#endif
   }
 }
 
 // Looping (play) task
 void playLoopTask(void *pvParameters)
 {
-  __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
-
   const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
 
   int currentIndexPlaying = 0;
   loopIndex = 0;
@@ -973,8 +1133,15 @@ void playLoopTask(void *pvParameters)
 
   while (1)
   {
+#ifndef TEST_PLAYLOOPTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
+#ifndef TEST_PLAYLOOPTASK
     if (!__atomic_load_n(&loop_record, __ATOMIC_RELAXED))
+#else
+    if (1)
+#endif
     {
       button_pressed = __atomic_load_n(&loop_play, __ATOMIC_RELAXED);
     }
@@ -982,7 +1149,12 @@ void playLoopTask(void *pvParameters)
     {
       button_pressed = false;
     }
+
+#ifndef TEST_PLAYLOOPTASK
     if (!button_pressed)
+#else
+    if (0)
+#endif
     {
       currentIndexPlaying = 0;
       __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
@@ -997,28 +1169,47 @@ void playLoopTask(void *pvParameters)
         currentIndexPlaying = 0;
       }
     }
+
+#ifdef TEST_PLAYLOOPTASK
+    break;
+#endif
   }
 }
+
 // Looping (record) task
 void recordLoopTask(void *pvParameters)
 {
   const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
+
   int currentIndexRecording = 0;
   bool button_pressed;
   endLoopIndex = 200;
   while (1)
   {
+#ifndef TEST_RECORDLOOPTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
     button_pressed = __atomic_load_n(&loop_record, __ATOMIC_RELAXED);
+
+#ifndef TEST_RECORDLOOPTASK
     if (!button_pressed)
+#else
+    if (0)
+#endif
     {
       currentIndexRecording = 0;
     }
     else
     {
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+
+#ifndef TEST_RECORDLOOPTASK
       if (currentIndexRecording == 0)
+#else
+      if (1)
+#endif
       {
         for (int i = 0; i < 100; ++i)
         {
@@ -1037,16 +1228,25 @@ void recordLoopTask(void *pvParameters)
       }
       xSemaphoreGive(notesArrayMutex);
     }
+
+#ifdef TEST_RECORDLOOPTASK
+    break;
+#endif
   }
 }
 
 // Mentronome task
 void metronomeTask(void *pvParameters)
 {
+#ifndef TEST_METRONOMETASK
   if (keyboardIndex != 2)
+#else
+  if (0)
+#endif
   {
     vTaskDelete(NULL);
   }
+
   __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -1054,26 +1254,34 @@ void metronomeTask(void *pvParameters)
   int currentCycle = 0;
   while (1)
   {
+#ifndef TEST_METRONOMETASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
     numberOfCycles = (600) / (40 + 15 * __atomic_load_n(&global_knob10, __ATOMIC_RELAXED));
+    currentCycle += 1;
+
+#ifndef TEST_METRONOMETASK
+    if (currentCycle == numberOfCycles - 3)
+#else
     if (0)
+#endif
     {
-      currentCycle = 0;
+      __atomic_store_n(&metronomeBeep, true, __ATOMIC_RELAXED);
+    }
+
+#ifndef TEST_METRONOMETASK
+    if (currentCycle >= numberOfCycles)
+#else
+    if (1)
+#endif
+    {
       __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
+      currentCycle = 0;
     }
-    else
-    {
-      currentCycle += 1;
-      if (currentCycle == numberOfCycles - 3)
-      {
-        __atomic_store_n(&metronomeBeep, true, __ATOMIC_RELAXED);
-      }
-      if (currentCycle >= numberOfCycles)
-      {
-        __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
-        currentCycle = 0;
-      }
-    }
+
+#ifdef TEST_METRONOMETASK
+    break;
+#endif
   }
 }
 
@@ -1196,15 +1404,16 @@ void setup()
   Serial.begin(9600);
   Serial.println("Hello World");
 
-  // thread initialisation
+// thread initialisation
+#ifndef DISABLE_THREADS
   TaskHandle_t sampleGenerationHandle = NULL;
   xTaskCreate(sampleGenerationTask, "sampleGeneration", 256, NULL, 8, &sampleGenerationHandle);
 
   TaskHandle_t loopRecordHandle = NULL;
-  xTaskCreate(recordLoopTask, "recordLoop", 256, NULL, 1, &loopRecordHandle);
+  xTaskCreate(recordLoopTask, "recordLoop", 256, NULL, 2, &loopRecordHandle);
 
   TaskHandle_t loopPlayHandle = NULL;
-  xTaskCreate(playLoopTask, "playLoop", 256, NULL, 2, &loopPlayHandle);
+  xTaskCreate(playLoopTask, "playLoop", 256, NULL, 3, &loopPlayHandle);
 
   TaskHandle_t scanKeysHandle = NULL;
   xTaskCreate(scanKeysTask, "scanKeys", 128, NULL, 7, &scanKeysHandle);
@@ -1213,13 +1422,14 @@ void setup()
   xTaskCreate(scanOtherBoardsTask, "scanOtherBoards", 64, NULL, 6, &scanKeysHandle);
 
   TaskHandle_t updateDisplayHandle = NULL;
-  xTaskCreate(updateDisplayTask, "updateDisplay", 64, NULL, 4, &updateDisplayHandle);
+  xTaskCreate(updateDisplayTask, "updateDisplay", 64, NULL, 1, &updateDisplayHandle);
 
   TaskHandle_t setVibStep = NULL;
-  xTaskCreate(setVibStepTask, "setVibrato", 64, NULL, 5, &setVibStep);
+  xTaskCreate(setVibStepTask, "setVibrato", 64, NULL, 4, &setVibStep);
 
   TaskHandle_t metronome = NULL;
-  xTaskCreate(metronomeTask, "metronome", 64, NULL, 3, &metronome);
+  xTaskCreate(metronomeTask, "metronome", 64, NULL, 5, &metronome);
+#endif
 
   keyArrayMutex = xSemaphoreCreateMutex();
   notesArrayMutex = xSemaphoreCreateMutex();
@@ -1232,7 +1442,10 @@ void setup()
 
   // Interrupt to execute the note playing
   sampleTimer->setOverflow(22000, HERTZ_FORMAT);
+
+#ifndef DISABLE_ISRs
   sampleTimer->attachInterrupt(sampleISR);
+#endif
   sampleTimer->resume();
 
   // Initialise CAN
@@ -1249,6 +1462,105 @@ void setup()
     local_knob0.set_limits(-3, 3);
   else
     local_knob0.set_limits(0, 8);
+
+#ifdef TEST_SETVIBSTEPTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    setVibStepTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SAMPLEGENERATIONTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    sampleGenerationTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SCANOTHERBOARDSTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    scanOtherBoardsTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_UPDATEDISPLAYTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    updateDisplayTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SCANKEYSTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    scanKeysTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_PLAYLOOPTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    playLoopTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_RECORDLOOPTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    recordLoopTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_METRONOMETASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    metronomeTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SAMPLEISR
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    sampleISR();
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
 
   vTaskStartScheduler();
 }
