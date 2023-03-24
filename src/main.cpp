@@ -4,12 +4,26 @@
 #include "../include/knob.hh"
 #include <ES_CAN.h>
 
+// #define DISABLE_THREADS 1
+// #define DISABLE_ISRs 1
+
+// #define TEST_SETVIBSTEPTASK 1
+// #define TEST_SAMPLEGENERATIONTASK 1
+// #define TEST_SCANOTHERBOARDSTASK 1
+// #define TEST_UPDATEDISPLAYTASK 1
+// #define TEST_SCANKEYSTASK 1
+// #define TEST_PLAYLOOPTASK 1
+// #define TEST_RECORDLOOPTASK 1
+// #define TEST_METRONOMETASK 1
+// #define TEST_SAMPLEISR
+
 // mutex to handle synchronization bug
 SemaphoreHandle_t keyArrayMutex;
 SemaphoreHandle_t notesArrayMutex;
 SemaphoreHandle_t sampleBufferSemaphore;
-// Pin definitions
-// Row select and enable
+
+//  Pin definitions
+//  Row select and enable
 const int RA0_PIN = D3;
 const int RA1_PIN = D6;
 const int RA2_PIN = D12;
@@ -51,16 +65,40 @@ U8G2_SSD1305_128X32_NONAME_F_HW_I2C u8g2(U8G2_R0);
 volatile uint8_t keyArray[7];
 const uint32_t stepSizes[] = {50953930, 54077542, 57396381, 60715219, 64229283, 68133799, 72233540, 76528508, 81018701, 85899345, 90975216, 96441538};
 
-// volatile to allow for concurrency
+// sine wave lookup table
+float_t sin_lut[1024] = {0, 0.00613588, 0.0122715, 0.0184067, 0.0245412, 0.0306748, 0.0368072, 0.0429383, 0.0490677, 0.0551952, 0.0613207, 0.0674439, 0.0735646, 0.0796824, 0.0857973, 0.091909, 0.0980171, 0.104122, 0.110222, 0.116319, 0.122411, 0.128498, 0.134581, 0.140658, 0.14673, 0.152797, 0.158858, 0.164913, 0.170962, 0.177004, 0.18304, 0.189069, 0.19509, 0.201105, 0.207111, 0.21311, 0.219101, 0.225084, 0.231058, 0.237024, 0.24298, 0.248928, 0.254866, 0.260794, 0.266713, 0.272621, 0.27852, 0.284408, 0.290285, 0.296151, 0.302006, 0.30785, 0.313682, 0.319502, 0.32531, 0.331106, 0.33689, 0.342661, 0.348419, 0.354164, 0.359895, 0.365613, 0.371317, 0.377007, 0.382683, 0.388345, 0.393992, 0.399624, 0.405241, 0.410843, 0.41643, 0.422, 0.427555, 0.433094, 0.438616, 0.444122, 0.449611, 0.455084, 0.460539, 0.465976, 0.471397, 0.476799, 0.482184, 0.48755, 0.492898, 0.498228, 0.503538, 0.50883, 0.514103, 0.519356, 0.52459, 0.529804, 0.534998, 0.540171, 0.545325, 0.550458, 0.55557, 0.560662, 0.565732, 0.570781, 0.575808, 0.580814, 0.585798, 0.59076, 0.595699, 0.600616, 0.605511, 0.610383, 0.615232, 0.620057, 0.624859, 0.629638, 0.634393, 0.639124, 0.643832, 0.648514, 0.653173, 0.657807, 0.662416, 0.667, 0.671559, 0.676093, 0.680601, 0.685084, 0.689541, 0.693971, 0.698376, 0.702755, 0.707107, 0.711432, 0.715731, 0.720003, 0.724247, 0.728464, 0.732654, 0.736817, 0.740951, 0.745058, 0.749136, 0.753187, 0.757209, 0.761202, 0.765167, 0.769103, 0.77301, 0.776888, 0.780737, 0.784557, 0.788346, 0.792107, 0.795837, 0.799537, 0.803208, 0.806848, 0.810457, 0.814036, 0.817585, 0.821103, 0.824589, 0.828045, 0.83147, 0.834863, 0.838225, 0.841555, 0.844854, 0.84812, 0.851355, 0.854558, 0.857729, 0.860867, 0.863973, 0.867046, 0.870087, 0.873095, 0.87607, 0.879012, 0.881921, 0.884797, 0.88764, 0.890449, 0.893224, 0.895966, 0.898674, 0.901349, 0.903989, 0.906596, 0.909168, 0.911706, 0.91421, 0.916679, 0.919114, 0.921514, 0.92388, 0.92621, 0.928506, 0.930767, 0.932993, 0.935184, 0.937339, 0.939459, 0.941544, 0.943593, 0.945607, 0.947586, 0.949528, 0.951435, 0.953306, 0.955141, 0.95694, 0.958703, 0.960431, 0.962121, 0.963776, 0.965394, 0.966976, 0.968522, 0.970031, 0.971504, 0.97294, 0.974339, 0.975702, 0.977028, 0.978317, 0.97957, 0.980785, 0.981964, 0.983105, 0.98421, 0.985278, 0.986308, 0.987301, 0.988258, 0.989177, 0.990058, 0.990903, 0.99171, 0.99248, 0.993212, 0.993907, 0.994565, 0.995185, 0.995767, 0.996313, 0.99682, 0.99729, 0.997723, 0.998118, 0.998476, 0.998795, 0.999078, 0.999322, 0.999529, 0.999699, 0.999831, 0.999925, 0.999981, 1, 0.999981, 0.999925, 0.999831, 0.999699, 0.999529, 0.999322, 0.999078, 0.998795, 0.998476, 0.998118, 0.997723, 0.99729, 0.99682, 0.996313, 0.995767, 0.995185, 0.994565, 0.993907, 0.993212, 0.99248, 0.99171, 0.990903, 0.990058, 0.989177, 0.988258, 0.987301, 0.986308, 0.985278, 0.98421, 0.983105, 0.981964, 0.980785, 0.97957, 0.978317, 0.977028, 0.975702, 0.974339, 0.97294, 0.971504, 0.970031, 0.968522, 0.966976, 0.965394, 0.963776, 0.962121, 0.960431, 0.958703, 0.95694, 0.955141, 0.953306, 0.951435, 0.949528, 0.947586, 0.945607, 0.943593, 0.941544, 0.939459, 0.937339, 0.935184, 0.932993, 0.930767, 0.928506, 0.92621, 0.92388, 0.921514, 0.919114, 0.916679, 0.91421, 0.911706, 0.909168, 0.906596, 0.903989, 0.901349, 0.898674, 0.895966, 0.893224, 0.890449, 0.88764, 0.884797, 0.881921, 0.879012, 0.87607, 0.873095, 0.870087, 0.867046, 0.863973, 0.860867, 0.857729, 0.854558, 0.851355, 0.84812, 0.844854, 0.841555, 0.838225, 0.834863, 0.83147, 0.828045, 0.824589, 0.821103, 0.817585, 0.814036, 0.810457, 0.806848, 0.803208, 0.799537, 0.795837, 0.792107, 0.788346, 0.784557, 0.780737, 0.776888, 0.77301, 0.769103, 0.765167, 0.761202, 0.757209, 0.753187, 0.749136, 0.745058, 0.740951, 0.736817, 0.732654, 0.728464, 0.724247, 0.720003, 0.715731, 0.711432, 0.707107, 0.702755, 0.698376, 0.693971, 0.689541, 0.685084, 0.680601, 0.676093, 0.671559, 0.667, 0.662416, 0.657807, 0.653173, 0.648514, 0.643832, 0.639124, 0.634393, 0.629638, 0.624859, 0.620057, 0.615232, 0.610383, 0.605511, 0.600616, 0.595699, 0.59076, 0.585798, 0.580814, 0.575808, 0.570781, 0.565732, 0.560662, 0.55557, 0.550458, 0.545325, 0.540171, 0.534998, 0.529804, 0.52459, 0.519356, 0.514103, 0.50883, 0.503538, 0.498228, 0.492898, 0.48755, 0.482184, 0.476799, 0.471397, 0.465976, 0.460539, 0.455084, 0.449611, 0.444122, 0.438616, 0.433094, 0.427555, 0.422, 0.41643, 0.410843, 0.405241, 0.399624, 0.393992, 0.388345, 0.382683, 0.377007, 0.371317, 0.365613, 0.359895, 0.354164, 0.348419, 0.342661, 0.33689, 0.331106, 0.32531, 0.319502, 0.313682, 0.30785, 0.302006, 0.296151, 0.290285, 0.284408, 0.27852, 0.272621, 0.266713, 0.260794, 0.254866, 0.248928, 0.24298, 0.237024, 0.231058, 0.225084, 0.219101, 0.21311, 0.207111, 0.201105, 0.19509, 0.189069, 0.18304, 0.177004, 0.170962, 0.164913, 0.158858, 0.152797, 0.14673, 0.140658, 0.134581, 0.128498, 0.122411, 0.116319, 0.110222, 0.104122, 0.0980171, 0.091909, 0.0857973, 0.0796824, 0.0735646, 0.0674439, 0.0613207, 0.0551952, 0.0490677, 0.0429383, 0.0368072, 0.0306748, 0.0245412, 0.0184067, 0.0122715, 0.00613588, 0, -0.00613588, -0.0122715, -0.0184067, -0.0245412, -0.0306748, -0.0368072, -0.0429383, -0.0490677, -0.0551952, -0.0613207, -0.0674439, -0.0735646, -0.0796824, -0.0857973, -0.091909, -0.0980171, -0.104122, -0.110222, -0.116319, -0.122411, -0.128498, -0.134581, -0.140658, -0.14673, -0.152797, -0.158858, -0.164913, -0.170962, -0.177004, -0.18304, -0.189069, -0.19509, -0.201105, -0.207111, -0.21311, -0.219101, -0.225084, -0.231058, -0.237024, -0.24298, -0.248928, -0.254866, -0.260794, -0.266713, -0.272621, -0.27852, -0.284408, -0.290285, -0.296151, -0.302006, -0.30785, -0.313682, -0.319502, -0.32531, -0.331106, -0.33689, -0.342661, -0.348419, -0.354164, -0.359895, -0.365613, -0.371317, -0.377007, -0.382683, -0.388345, -0.393992, -0.399624, -0.405241, -0.410843, -0.41643, -0.422, -0.427555, -0.433094, -0.438616, -0.444122, -0.449611, -0.455084, -0.460539, -0.465976, -0.471397, -0.476799, -0.482184, -0.48755, -0.492898, -0.498228, -0.503538, -0.50883, -0.514103, -0.519356, -0.52459, -0.529804, -0.534998, -0.540171, -0.545325, -0.550458, -0.55557, -0.560662, -0.565732, -0.570781, -0.575808, -0.580814, -0.585798, -0.59076, -0.595699, -0.600616, -0.605511, -0.610383, -0.615232, -0.620057, -0.624859, -0.629638, -0.634393, -0.639124, -0.643832, -0.648514, -0.653173, -0.657807, -0.662416, -0.667, -0.671559, -0.676093, -0.680601, -0.685084, -0.689541, -0.693971, -0.698376, -0.702755, -0.707107, -0.711432, -0.715731, -0.720003, -0.724247, -0.728464, -0.732654, -0.736817, -0.740951, -0.745058, -0.749136, -0.753187, -0.757209, -0.761202, -0.765167, -0.769103, -0.77301, -0.776888, -0.780737, -0.784557, -0.788346, -0.792107, -0.795837, -0.799537, -0.803208, -0.806848, -0.810457, -0.814036, -0.817585, -0.821103, -0.824589, -0.828045, -0.83147, -0.834863, -0.838225, -0.841555, -0.844854, -0.84812, -0.851355, -0.854558, -0.857729, -0.860867, -0.863973, -0.867046, -0.870087, -0.873095, -0.87607, -0.879012, -0.881921, -0.884797, -0.88764, -0.890449, -0.893224, -0.895966, -0.898674, -0.901349, -0.903989, -0.906596, -0.909168, -0.911706, -0.91421, -0.916679, -0.919114, -0.921514, -0.92388, -0.92621, -0.928506, -0.930767, -0.932993, -0.935184, -0.937339, -0.939459, -0.941544, -0.943593, -0.945607, -0.947586, -0.949528, -0.951435, -0.953306, -0.955141, -0.95694, -0.958703, -0.960431, -0.962121, -0.963776, -0.965394, -0.966976, -0.968522, -0.970031, -0.971504, -0.97294, -0.974339, -0.975702, -0.977028, -0.978317, -0.97957, -0.980785, -0.981964, -0.983105, -0.98421, -0.985278, -0.986308, -0.987301, -0.988258, -0.989177, -0.990058, -0.990903, -0.99171, -0.99248, -0.993212, -0.993907, -0.994565, -0.995185, -0.995767, -0.996313, -0.99682, -0.99729, -0.997723, -0.998118, -0.998476, -0.998795, -0.999078, -0.999322, -0.999529, -0.999699, -0.999831, -0.999925, -0.999981, -1, -0.999981, -0.999925, -0.999831, -0.999699, -0.999529, -0.999322, -0.999078, -0.998795, -0.998476, -0.998118, -0.997723, -0.99729, -0.99682, -0.996313, -0.995767, -0.995185, -0.994565, -0.993907, -0.993212, -0.99248, -0.99171, -0.990903, -0.990058, -0.989177, -0.988258, -0.987301, -0.986308, -0.985278, -0.98421, -0.983105, -0.981964, -0.980785, -0.97957, -0.978317, -0.977028, -0.975702, -0.974339, -0.97294, -0.971504, -0.970031, -0.968522, -0.966976, -0.965394, -0.963776, -0.962121, -0.960431, -0.958703, -0.95694, -0.955141, -0.953306, -0.951435, -0.949528, -0.947586, -0.945607, -0.943593, -0.941544, -0.939459, -0.937339, -0.935184, -0.932993, -0.930767, -0.928506, -0.92621, -0.92388, -0.921514, -0.919114, -0.916679, -0.91421, -0.911706, -0.909168, -0.906596, -0.903989, -0.901349, -0.898674, -0.895966, -0.893224, -0.890449, -0.88764, -0.884797, -0.881921, -0.879012, -0.87607, -0.873095, -0.870087, -0.867046, -0.863973, -0.860867, -0.857729, -0.854558, -0.851355, -0.84812, -0.844854, -0.841555, -0.838225, -0.834863, -0.83147, -0.828045, -0.824589, -0.821103, -0.817585, -0.814036, -0.810457, -0.806848, -0.803208, -0.799537, -0.795837, -0.792107, -0.788346, -0.784557, -0.780737, -0.776888, -0.77301, -0.769103, -0.765167, -0.761202, -0.757209, -0.753187, -0.749136, -0.745058, -0.740951, -0.736817, -0.732654, -0.728464, -0.724247, -0.720003, -0.715731, -0.711432, -0.707107, -0.702755, -0.698376, -0.693971, -0.689541, -0.685084, -0.680601, -0.676093, -0.671559, -0.667, -0.662416, -0.657807, -0.653173, -0.648514, -0.643832, -0.639124, -0.634393, -0.629638, -0.624859, -0.620057, -0.615232, -0.610383, -0.605511, -0.600616, -0.595699, -0.59076, -0.585798, -0.580814, -0.575808, -0.570781, -0.565732, -0.560662, -0.55557, -0.550458, -0.545325, -0.540171, -0.534998, -0.529804, -0.52459, -0.519356, -0.514103, -0.50883, -0.503538, -0.498228, -0.492898, -0.48755, -0.482184, -0.476799, -0.471397, -0.465976, -0.460539, -0.455084, -0.449611, -0.444122, -0.438616, -0.433094, -0.427555, -0.422, -0.41643, -0.410843, -0.405241, -0.399624, -0.393992, -0.388345, -0.382683, -0.377007, -0.371317, -0.365613, -0.359895, -0.354164, -0.348419, -0.342661, -0.33689, -0.331106, -0.32531, -0.319502, -0.313682, -0.30785, -0.302006, -0.296151, -0.290285, -0.284408, -0.27852, -0.272621, -0.266713, -0.260794, -0.254866, -0.248928, -0.24298, -0.237024, -0.231058, -0.225084, -0.219101, -0.21311, -0.207111, -0.201105, -0.19509, -0.189069, -0.18304, -0.177004, -0.170962, -0.164913, -0.158858, -0.152797, -0.14673, -0.140658, -0.134581, -0.128498, -0.122411, -0.116319, -0.110222, -0.104122, -0.0980171, -0.091909, -0.0857973, -0.0796824, -0.0735646, -0.0674439, -0.0613207, -0.0551952, -0.0490677, -0.0429383, -0.0368072, -0.0306748, -0.0245412, -0.0184067, -0.0122715, -0.00613588};
+
+// Array of 3, twelve bit numbers for each keyboard
 volatile uint16_t g_note_states[3];
 volatile uint64_t g_ss;
 
-const char *notes[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
+// loopy loop
+volatile uint16_t recorded_g_note_states[200][3];
+volatile int number_of_used_slots;
+volatile bool loop_play = false;
+volatile bool loop_record = false;
+volatile bool loopPlaying;
+volatile int loopIndex;
+volatile int endLoopIndex;
+
+/// notes that are being played
+const char *notes[13] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B", " "};
+
+const char *knobTitles[12] = {"OCT", "NONE", "WAVE", "VOL", "PAN", "REC", "PLAY", "NONE", "ATTACK", "DECAY", "SUSTAIN", "NONE"};
 volatile uint8_t note;
-volatile uint32_t global_Vout;
 
 // bendy bendy
 volatile uint32_t bendStep;
+
+// metronomey
+volatile bool metronomeBeep;
+
+// vibby vibby
+volatile int32_t vibStep;
+
+// envylopey
+volatile float noteMult[36] = {0.};
+volatile bool envActive[36] = {false};
 
 // local knobs
 Knob local_knob0, local_knob1, local_knob2, local_knob3;
@@ -78,9 +116,8 @@ volatile int8_t global_knob8 = 0;
 volatile int8_t global_knob9 = 0;
 volatile int8_t global_knob10 = 0;
 volatile int8_t global_knob11 = 0;
-// DMA
-// TODO work out the proper way of determining sample buffer size
-const int SAMPLE_BUFFER_SIZE = 100;
+
+const int SAMPLE_BUFFER_SIZE = 128;
 uint8_t sampleBuffer0[SAMPLE_BUFFER_SIZE];
 uint8_t sampleBuffer1[SAMPLE_BUFFER_SIZE];
 volatile bool writeBuffer1 = false;
@@ -119,16 +156,165 @@ void setRow(uint8_t rowIdx)
   digitalWrite(REN_PIN, HIGH);
 }
 
-// Sample interrupt
+void setVibStepTask(void *pvParameters)
+{
+  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  // vib things
+  float vibStepSize = 2049870.0 / 2.0; // 1366580 * 2;
+
+  long int joyChange;
+  float abs_joyChange;
+  int i = 0;
+  float t;
+  float freq;
+  float tempVibStep;
+
+  while (1)
+  {
+
+// skip if testing so that task doesn't block
+#ifndef TEST_SETVIBSTEPTASK
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
+    joyChange = 512 - analogRead(JOYY_PIN);
+    abs_joyChange = (joyChange < 0) ? -1.0 * joyChange : joyChange;
+
+#ifndef TEST_SETVIBSTEPTASK
+    if (abs_joyChange < 100)
+#else
+    if (0)
+#endif
+    {
+      __atomic_store_n(&vibStep, 0, __ATOMIC_RELAXED);
+      continue;
+    }
+
+    freq = 2500.0 * (abs_joyChange / 512.0);
+
+    t = ((float)i) / 22000.0;
+
+    tempVibStep = vibStepSize * sin(2 * 3.14 * freq * t);
+    __atomic_store_n(&vibStep, (int32_t)tempVibStep, __ATOMIC_RELAXED);
+
+    if (i == 22000)
+    {
+      i = 0;
+    }
+    i++;
+
+#ifdef TEST_SETVIBSTEPTASK
+    break;
+#endif
+  }
+}
+
+void keyPressExecution(void *pvParameters)
+{
+  // Note pressed
+  uint8_t noteIdx = (int)pvParameters;
+
+  // Envelope parameters
+  uint32_t attack = 100 * __atomic_load_n(&global_knob7, __ATOMIC_RELAXED);
+  uint32_t decay = 50 * __atomic_load_n(&global_knob8, __ATOMIC_RELAXED);
+  float sustain = 1;
+  uint32_t release = 100 * 50;
+
+  // Measurements
+  float voutMult = 0.0;
+  int startTime = millis();
+  int currentTime = startTime;
+  float atkDif;
+
+  // Safe handling of g_note_states
+  uint16_t g_note_temp;
+  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+  envActive[noteIdx] = true;
+  noteMult[noteIdx] = voutMult;
+  g_note_temp = g_note_states[noteIdx / 12];
+  xSemaphoreGive(notesArrayMutex);
+
+  // Starting attack
+  while ((currentTime < startTime + attack) && ((g_note_temp & (1 << (noteIdx % 12))) != 0))
+  {
+    currentTime = millis();
+    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+    g_note_temp = g_note_states[noteIdx / 12];
+    atkDif = ((float)(currentTime - startTime) / (float)attack);
+    voutMult = atkDif;
+    noteMult[noteIdx] = voutMult;
+    xSemaphoreGive(notesArrayMutex);
+  }
+
+  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+  envActive[noteIdx] = false;
+  noteMult[noteIdx] = 1;
+  xSemaphoreGive(notesArrayMutex);
+
+  startTime = millis();
+  currentTime = startTime;
+
+  // Starting decay
+  while ((currentTime < startTime + decay) && ((g_note_temp & (1 << (noteIdx % 12))) != 0))
+  {
+    currentTime = millis();
+    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+    envActive[noteIdx] = true;
+    g_note_temp = g_note_states[noteIdx / 12];
+    voutMult = 1. - ((1.0 - sustain) * ((float)(currentTime - startTime) / (float)decay));
+    noteMult[noteIdx] = voutMult;
+    xSemaphoreGive(notesArrayMutex);
+  }
+
+  voutMult = sustain;
+  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+  noteMult[noteIdx] = voutMult;
+  g_note_temp = g_note_states[noteIdx / 12];
+  envActive[noteIdx] = false;
+  xSemaphoreGive(notesArrayMutex);
+
+  // Starting sustain
+  while ((g_note_temp & (1 << (noteIdx % 12))) != 0)
+  {
+    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+    envActive[noteIdx] = true;
+    g_note_temp = g_note_states[noteIdx / 12];
+    xSemaphoreGive(notesArrayMutex);
+  }
+
+  xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+  envActive[noteIdx] = false;
+  noteMult[noteIdx] = 0;
+  xSemaphoreGive(notesArrayMutex);
+
+  vTaskDelete(NULL);
+}
+
+// Create a envelope tast every time a key is pressed
+void startEnvelopeTask(int noteIdx)
+{
+  TaskHandle_t envelopeTask = NULL;
+  xTaskCreate(keyPressExecution, "enveloper", 256, (void *)noteIdx, 1, &envelopeTask);
+}
+
+// Sample interrupt (with double buffer)
 void sampleISR()
 {
   static uint32_t readCtr = 0;
 
+#ifndef TEST_SAMPLEISR
   if (readCtr == SAMPLE_BUFFER_SIZE)
+#else
+  if (1)
+#endif
   {
     readCtr = 0;
     writeBuffer1 = !writeBuffer1;
+#ifndef TEST_SAMPLEISR
     xSemaphoreGiveFromISR(sampleBufferSemaphore, NULL);
+#endif
   }
 
   if (writeBuffer1)
@@ -137,104 +323,9 @@ void sampleISR()
     analogWrite(OUTR_PIN, sampleBuffer1[readCtr++]);
 }
 
-uint32_t generateVout(int32_t &Vout, uint8_t &wave_type, uint64_t &ss, uint8_t &volume)
-{
-  uint32_t lower_phases[12] = {0};
-  uint32_t middle_phases[12] = {0};
-  uint32_t upper_phases[12] = {0};
-
-  if (wave_type == 0)
-  {
-    // // sine wave
-    // for (int i = 0; i < 12; ++i)
-    // {
-    //   if (ss & 1)
-    //   {
-    //     lower_phases0[i] += (stepSizes[i] >> 1) + bendStep;
-    //     angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
-    //     Vout = sin(angle) * 255 - 128;
-    //     Vout >>= (8 - volume);
-    //   }
-
-    //   if (ss & 0x1000)
-    //   {
-    //     middle_phases0[i] += stepSizes[i] + bendStep;
-    //     angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
-    //     Vout = sin(angle) * 255 - 128;
-    //     Vout >>= (8 - volume);
-    //   }
-
-    //   if (ss & 0x1000000)
-    //   {
-    //     upper_phases0[i] += (stepSizes[i] << 1) + bendStep;
-    //     angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
-    //     Vout = sin(angle) * 255 - 128;
-    //     Vout >>= (8 - volume);
-    //   }
-
-    //   ss = ss >> 1;
-    // }
-  }
-  else if (wave_type == 1)
-  {
-    for (int i = 0; i < 12; ++i)
-    {
-      if (ss & 1)
-      {
-        lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
-        Vout += (((lower_phases[i] >> 31) & 1) ? -(lower_phases[i] >> 24) - 128 : (lower_phases[i] >> 24) - 128) >> (8 - volume);
-      }
-
-      if (ss & 0x1000)
-      {
-        middle_phases[i] += stepSizes[i] + bendStep;
-        Vout += (((middle_phases[i] >> 31) & 1) ? -(middle_phases[i] >> 24) - 128 : (middle_phases[i] >> 24) - 128) >> (8 - volume);
-      }
-
-      if (ss & 0x1000000)
-      {
-        upper_phases[i] += (stepSizes[i] << 1) + bendStep;
-        Vout += (((upper_phases[i] >> 31) & 1) ? -(upper_phases[i] >> 24) - 128 : (upper_phases[i] >> 24) - 128) >> (8 - volume);
-      }
-
-      ss = ss >> 1;
-    }
-  }
-  else if (wave_type == 2)
-  {
-    for (int i = 0; i < 12; ++i)
-    {
-      if (ss & 1)
-      {
-        lower_phases[i] += (stepSizes[i] >> 1) + bendStep;
-        Vout += ((lower_phases[i] >> 24) - 128) >> (8 - volume);
-      }
-
-      if (ss & 0x1000)
-      {
-        middle_phases[i] += stepSizes[i] + bendStep;
-        Vout += ((middle_phases[i] >> 24) - 128) >> (8 - volume);
-      }
-
-      if (ss & 0x1000000)
-      {
-        upper_phases[i] += (stepSizes[i] << 1) + bendStep;
-        Vout += ((upper_phases[i] >> 24) - 128) >> (8 - volume);
-      }
-
-      ss = ss >> 1;
-    }
-  }
-  else if (wave_type == 3)
-  {
-  }
-  return Vout;
-}
-
+// Generating sound task
 void sampleGenerationTask(void *pvParameters)
 {
-  // BUFFER SIZE: 100; INITIATION INTERVAL = 4.5ms
-  global_Vout = 0;
   // Sine wave phases
   uint32_t lower_phases0[12] = {0};
   uint32_t middle_phases0[12] = {0};
@@ -254,200 +345,374 @@ void sampleGenerationTask(void *pvParameters)
   uint32_t lower_phases3[12] = {0};
   uint32_t middle_phases3[12] = {0};
   uint32_t upper_phases3[12] = {0};
+
   uint64_t ss;
+  uint8_t volume;
+  float pan;
+  int32_t Vout;
+
   while (1)
   {
+#ifndef TEST_SAMPLEGENERATIONTASK
     xSemaphoreTake(sampleBufferSemaphore, portMAX_DELAY);
+#endif
+
+    // Adding to the buffer
     for (uint32_t writeCtr = 0; writeCtr < SAMPLE_BUFFER_SIZE; writeCtr++)
     {
-      // TODO check if g_note_states is ok to be accessed here
 
-      // doing lowe keyboard
-      ss = g_ss;
-      int32_t Vout = 0;
-      int8_t volume = global_knob3;
-      int8_t wave_type = global_knob2;
-      int8_t octave_shift = local_knob0.get_rotation();
+      Vout = 0;
+      volume = __atomic_load_n(&global_knob3, __ATOMIC_RELAXED);
+      pan = (float)__atomic_load_n(&global_knob4, __ATOMIC_RELAXED) / 8.0;
+
+      int8_t wave_type = __atomic_load_n(&global_knob2, __ATOMIC_RELAXED);
+      int8_t octave_shift = __atomic_load_n(&global_knob0, __ATOMIC_RELAXED);
       bool pos_shift = (octave_shift > 0) ? true : false;
 
-      if (keyboardIndex == 0)
+      // TODO: is bendStep a safe read? Atomic it?
+      uint32_t bend = __atomic_load_n(&bendStep, __ATOMIC_RELAXED);
+      int32_t vib = __atomic_load_n(&vibStep, __ATOMIC_RELAXED);
+      int32_t stepOffset = bend + vib;
+
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+      ss = g_ss;
+
+// sine wave
+#ifndef TEST_SAMPLEGENERATIONTASK
+      if (wave_type == 0)
+#else
+      if (1)
+#endif
       {
-        if (wave_type == 0)
+        float_t angle;
+        for (int i = 0; i < 12; ++i)
         {
-          // sine wave
-          float_t angle;
-          for (int i = 0; i < 12; ++i)
+// Lower keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
+          if (ss & 1)
+#else
+          if (1)
+#endif
           {
-            if (ss & 1)
-            {
-              lower_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-              angle = ((float_t)lower_phases0[i] / 2147483648) * 3.14159;
-              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-            }
-
-            if (ss & 0x1000)
-            {
-              middle_phases0[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)));
-              angle = ((float_t)middle_phases0[i] / 2147483648) * 3.14159;
-              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-            }
-
-            if (ss & 0x1000000)
-            {
-              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-              angle = ((float_t)upper_phases0[i] / 2147483648) * 3.14159;
-              Vout += int32_t(sin(angle) * 32 - 128) >> (8 - volume);
-            }
-
-            ss = ss >> 1;
+            lower_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift)))) + stepOffset;
+            Vout += (sin_lut[lower_phases0[i] >> 22]) * 128 * (float)noteMult[i];
           }
-        }
 
-        else if (wave_type == 1)
-        {
-          for (int i = 0; i < 12; ++i)
+// Middle keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
+          if (ss & 0x1000)
+#else
+          if (1)
+#endif
           {
-            if (ss & 1)
-            {
-              lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-              Vout += (((lower_phases1[i] >> 31) & 1) ? -(lower_phases1[i] >> 24) - 128 : (lower_phases1[i] >> 24) - 128) >> (8 - volume);
-            }
-
-            if (ss & 0x1000)
-            {
-              middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-              Vout += (((middle_phases1[i] >> 31) & 1) ? -(middle_phases1[i] >> 24) - 128 : (middle_phases1[i] >> 24) - 128) >> (8 - volume);
-            }
-
-            if (ss & 0x1000000)
-            {
-              upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-              Vout += (((upper_phases1[i] >> 31) & 1) ? -(upper_phases1[i] >> 24) - 128 : (upper_phases1[i] >> 24) - 128) >> (8 - volume);
-            }
-
-            ss = ss >> 1;
+            middle_phases0[i] += ((pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift)))) + stepOffset;
+            Vout += sin_lut[middle_phases0[i] >> 22] * 128 * (float)noteMult[i + 12];
           }
-        }
-        else if (wave_type == 2)
-        {
-          // sawtooth
-          for (int i = 0; i < 12; ++i)
+
+// Upper keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
+          if (ss & 0x1000000)
+#else
+          if (1)
+#endif
           {
-            if (ss & 1)
-            {
-              lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-              Vout += ((lower_phases2[i] >> 24) - 128) >> (8 - volume);
-            }
-
-            if (ss & 0x1000)
-            {
-              middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-              Vout += ((middle_phases2[i] >> 24) - 128) >> (8 - volume);
-            }
-
-            if (ss & 0x1000000)
-            {
-              upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-              Vout += ((upper_phases2[i] >> 24) - 128) >> (8 - volume);
-            }
-
-            ss = ss >> 1;
+            upper_phases3[i] += ((pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift)))) + stepOffset;
+            Vout += sin_lut[upper_phases0[i] >> 22] * 128 * (float)noteMult[i + 24];
           }
+
+          ss = ss >> 1;
         }
-
-        else if (wave_type == 3)
-        {
-          // pulse wave
-
-          for (int i = 0; i < 12; ++i)
-          {
-            if (ss & 1)
-            {
-              lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + bendStep;
-              Vout += (((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
-            }
-
-            if (ss & 0x1000)
-            {
-              middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + bendStep;
-              Vout += (((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
-            }
-
-            if (ss & 0x1000000)
-            {
-              upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + bendStep;
-              Vout += (((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> (8 - volume);
-            }
-
-            ss = ss >> 1;
-          }
-        }
-
-        global_Vout = Vout;
       }
-      else
+      // triangle wave
+      else if (wave_type == 1)
       {
-        Vout = global_Vout;
+        for (int i = 0; i < 12; ++i)
+        {
+          // Lower keyboard
+          if (ss & 1)
+          {
+            lower_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
+            Vout += (((int)(lower_phases1[i] >> 31) & 1) ? -(int)(lower_phases1[i] >> 24) + 128 : (int)(lower_phases1[i] >> 24)) * noteMult[i] - 128;
+            Vout += 64;
+          }
+
+          // Middle keyboard
+          if (ss & 0x1000)
+          {
+            middle_phases1[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
+            Vout += (((int)(middle_phases1[i] >> 31) & 1) ? -(int)(middle_phases1[i] >> 24) + 128 : (int)(middle_phases1[i] >> 24)) * noteMult[i + 12] - 128;
+            Vout += 64;
+          }
+
+          // Upper keyboard
+          if (ss & 0x1000000)
+          {
+            upper_phases1[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
+            Vout += (((int)(upper_phases1[i] >> 31) & 1) ? -(int)(upper_phases1[i] >> 24) + 128 : (int)(upper_phases1[i] >> 24)) * noteMult[i + 24] - 128;
+            Vout += 64;
+          }
+
+          ss = ss >> 1;
+        }
+      }
+      // sawtooth
+      else if (wave_type == 2)
+      {
+        for (int i = 0; i < 12; ++i)
+        {
+          // Lower keyboard
+          if (ss & 1)
+          {
+            lower_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
+            Vout += ((int)(lower_phases2[i] >> 24) - 128) * noteMult[i];
+          }
+
+          // Middle keyboard
+          if (ss & 0x1000)
+          {
+            middle_phases2[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
+            Vout += ((int)(middle_phases2[i] >> 24) - 128) * noteMult[i + 12];
+          }
+
+          // Upper keyboard
+          if (ss & 0x1000000)
+          {
+            upper_phases2[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
+            Vout += ((int)(upper_phases2[i] >> 24) - 128) * noteMult[i + 24];
+          }
+
+          ss = ss >> 1;
+        }
+      }
+      // pulse wave
+      else if (wave_type == 3)
+      {
+        for (int i = 0; i < 12; ++i)
+        {
+          // Lower keyboard
+          if (ss & 1)
+          {
+            lower_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift - 1)) : (stepSizes[i] >> (1 - octave_shift))) + stepOffset;
+            Vout += ((((lower_phases3[i] >> 31) & 1) ? -255 : 255) >> 2) * noteMult[i];
+          }
+
+          // Middle keyboard
+          if (ss & 0x1000)
+          {
+            middle_phases3[i] += (pos_shift ? (stepSizes[i] << (octave_shift)) : (stepSizes[i] >> (-octave_shift))) + stepOffset;
+            Vout += ((((middle_phases3[i] >> 31) & 1) ? -255 : 255) >> 2) * noteMult[i + 12];
+          }
+
+          // Upper keyboard
+          if (ss & 0x1000000)
+          {
+            upper_phases3[i] += (pos_shift ? (stepSizes[i] << (1 + octave_shift)) : ((stepSizes[i] << 1) >> (-octave_shift))) + stepOffset;
+            Vout += ((((upper_phases3[i] >> 31) & 1) ? -255 : 255) >> 2) * noteMult[i + 24];
+          }
+
+          ss = ss >> 1;
+        }
+      }
+      xSemaphoreGive(notesArrayMutex);
+
+      // Volume shifting
+      Vout >>= (8 - volume);
+
+      // Vout capping
+      if (Vout > 127)
+      {
+        Vout = 127;
+      }
+      else if (Vout < -128)
+      {
+        Vout = -128;
       }
 
+// Panning (sound moving to/from different keyboard speaker)
+// Only applicable for more than 1 keyboard
+#ifndef TEST_SAMPLEGENERATIONTASK
+      if (numberOfKeyboards == 2)
+#else
+      if (1)
+#endif
+      {
+        if (keyboardIndex == 0)
+        {
+          Vout = Vout * (1 - pan);
+        }
+        else
+        {
+          Vout = Vout * pan;
+        }
+      }
+
+#ifndef TEST_SAMPLEGENERATIONTASK
+      if (numberOfKeyboards == 3)
+#else
+      if (0)
+#endif
+      {
+        if (keyboardIndex == 0)
+        {
+          Vout = Vout * (1 - pan);
+        }
+        else if (keyboardIndex == 2)
+        {
+          Vout = Vout * pan;
+        }
+      }
+
+      // Write to the buffer
       if (writeBuffer1)
         sampleBuffer1[writeCtr] = Vout + 128;
       else
         sampleBuffer0[writeCtr] = Vout + 128;
     }
+
+#ifdef TEST_SAMPLEGENERATIONTASK
+    break;
+#endif
   }
 }
 
+// CAN stuff
 void scanOtherBoardsTask(void *pvParameters)
 {
+  // Timing for the task
+  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
   // CAN Message Variables
   uint32_t ID;
   uint8_t RX_Message[8] = {0};
 
-  // Timing for the task
-  const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
-  TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1)
   {
+#ifndef TEST_SCANOTHERBOARDSTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
+#ifndef TEST_SCANOTHERBOARDSTASK
     while (CAN_CheckRXLevel())
+#else
+    if (1)
+#endif
     {
       CAN_RX(ID, RX_Message);
+      uint16_t newNotes0, newNotes1, newNotes2;
+
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-      if (keyboardIndex == 0)
+      g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
+
+      // Sending looping message to other boards
+      if (keyboardIndex != 1)
       {
-        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf);
-        int8_t tempknob0, tempknob1, tempknob2, tempknob3;
+        __atomic_store_n(&loop_record, RX_Message[6], __ATOMIC_RELAXED);
+        __atomic_store_n(&loop_play, RX_Message[7], __ATOMIC_RELAXED);
+      }
+      xSemaphoreGive(notesArrayMutex);
 
-        tempknob0 = RX_Message[4];
-        tempknob1 = RX_Message[5];
-        tempknob2 = RX_Message[6];
-        tempknob3 = RX_Message[7];
+      // Knob values received from other boards
+      int8_t tempknob0, tempknob1, tempknob2, tempknob3;
+      tempknob0 = RX_Message[4] & 0xF;
+      tempknob1 = (RX_Message[4] & 0xF0) >> 4;
+      tempknob2 = RX_Message[5] & 0xF;
+      tempknob3 = (RX_Message[5] & 0xF0) >> 4;
 
-        if (RX_Message[0] == 1)
-        {
-          global_knob4 = tempknob0;
-          global_knob5 = tempknob1;
-          global_knob6 = tempknob2;
-          global_knob7 = tempknob3;
-        }
-        else
-        {
-          global_knob8 = tempknob0;
-          global_knob9 = tempknob1;
-          global_knob10 = tempknob2;
-          global_knob11 = tempknob3;
-        }
+      if (RX_Message[0] == 0)
+      {
+        __atomic_store_n(&global_knob0, tempknob0, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob1, tempknob1, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob2, tempknob2, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob3, tempknob3, __ATOMIC_RELAXED);
+      }
+      if (RX_Message[0] == 1)
+      {
+        __atomic_store_n(&global_knob4, tempknob0, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob5, tempknob1, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob6, tempknob2, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob7, tempknob3, __ATOMIC_RELAXED);
       }
       else
       {
-        g_note_states[RX_Message[0]] = ((RX_Message[3] & 0xf) << 8) + ((RX_Message[2] & 0xf) << 4) + (RX_Message[1] & 0xf); // change this to global vout
+        __atomic_store_n(&global_knob8, tempknob0, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob9, tempknob1, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob10, tempknob2, __ATOMIC_RELAXED);
+        __atomic_store_n(&global_knob11, tempknob3, __ATOMIC_RELAXED);
+      }
+
+      // Loop running
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+
+#ifndef TEST_SCANOTHERBOARDSTASK
+      if (loopPlaying && (keyboardIndex == 1))
+#else
+      if (1)
+#endif
+      {
+        newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
+        newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
+        newNotes2 = (recorded_g_note_states[loopIndex][2]) & (~g_note_states[2]);
+
+        int s = 1;
+        for (int i = 0; i < 12; i++)
+        {
+#ifndef TEST_SCANOTHERBOARDSTASK
+          if ((newNotes0 & s) != 0)
+#else
+          if (1)
+#endif
+          {
+            envActive[i] = true;
+            startEnvelopeTask(i);
+          }
+
+#ifndef TEST_SCANOTHERBOARDSTASK
+          if ((newNotes1 & s) != 0)
+#else
+          if (1)
+#endif
+          {
+            envActive[i + 12] = true;
+            startEnvelopeTask(i + 12);
+          }
+#ifndef TEST_SCANOTHERBOARDSTASK
+          if ((newNotes2 & s) != 0)
+#else
+          if (1)
+#endif
+          {
+            envActive[i + 24] = true;
+            startEnvelopeTask(i + 24);
+          }
+
+          s <<= 1;
+        }
+        g_note_states[0] |= recorded_g_note_states[loopIndex][0];
+        g_note_states[1] |= recorded_g_note_states[loopIndex][1];
+        g_note_states[2] |= recorded_g_note_states[loopIndex][2];
       }
       xSemaphoreGive(notesArrayMutex);
     }
+
+#ifdef TEST_SCANOTHERBOARDSTASK
+    break;
+#endif
   }
 }
 
+// Display helper functions (knob bar)
+void drawKnobLevel(int xCoordinate, uint8_t knob_value)
+{
+  for (int i = 0; i < knob_value; i++)
+  {
+    u8g2.drawLine(xCoordinate, 30 - 2 * i, xCoordinate + 15, 30 - 2 * i);
+    u8g2.drawLine(xCoordinate, 29 - 2 * i, xCoordinate + 15, 29 - 2 * i);
+    drawKnobLevel(5, __atomic_load_n(&global_knob0, __ATOMIC_RELAXED));
+  }
+}
+
+// Display helper functions (Waveform)
 void drawWaveform(uint8_t knob2rotation)
 {
   if (knob2rotation == 0)
@@ -458,7 +723,6 @@ void drawWaveform(uint8_t knob2rotation)
       float angle = i * 9;
       int x = 25 + sin(angle * 3.14159 / 180) * 7;
       u8g2.drawPixel(5 + i, x);
-      // u8g2.drawStr(30, 10, ": Sine");
     }
   }
   else if (knob2rotation == 1)
@@ -468,7 +732,6 @@ void drawWaveform(uint8_t knob2rotation)
     u8g2.drawLine(15, 17, 25, 27);
     u8g2.drawLine(25, 27, 35, 17);
     u8g2.drawLine(35, 17, 45, 27);
-    // u8g2.drawStr(90, 10, "Triangle");
   }
   else if (knob2rotation == 2)
   {
@@ -478,7 +741,6 @@ void drawWaveform(uint8_t knob2rotation)
     u8g2.drawLine(15, 27, 25, 17);
     u8g2.drawLine(25, 17, 25, 27);
     u8g2.drawLine(25, 27, 35, 17);
-    // u8g2.drawStr(90, 10, "Sawtooth");
   }
   else if (knob2rotation == 3)
   {
@@ -492,93 +754,158 @@ void drawWaveform(uint8_t knob2rotation)
     u8g2.drawLine(20, 17, 25, 17);
     u8g2.drawLine(25, 17, 25, 27);
     u8g2.drawLine(25, 27, 30, 27);
-    // u8g2.drawStr(90, 10, "Pulse");
   }
 }
 
+// Display helper functions (record button)
+void recordButton()
+{
+  u8g2.drawCircle(47, 22, 5);
+  u8g2.drawFilledEllipse(47, 22, 2.5, 2.5);
+}
+
+// Display helper functions (Play button)
+void playButton()
+{
+  u8g2.drawTriangle(80, 25, 80, 15, 85, 20);
+}
+
+// Display helper functions (metronome square)
+void metronomeDraw()
+{
+  u8g2.drawBox(115, 22.5, 10, 10);
+}
+
+// Updating the display task
 void updateDisplayTask(void *pvParameters)
 {
+  int noteToDisplay;
   // Timing for the task
   const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   // infinite loop for this task
   while (1)
   {
+#ifndef TEST_UPDATEDISPLAYTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
 
     // Update display
-    u8g2.clearBuffer();                   // clear the internal memory
-    u8g2.setFont(u8g2_font_profont10_tf); // choose a suitable font
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_profont10_tf);
 
-    // only show main volume on first keyboard
-    if (!keyboardIndex)
+// First keyboard display: Wavetype, volume, notepressed
+#ifndef TEST_UPDATEDISPLAYTASK
+    if (keyboardIndex == 0)
+#else
+    if (1)
+#endif
     {
-      uint8_t knob3rotation = global_knob3;
-      uint8_t knob2rotation = global_knob2;
+      uint8_t knob3rotation = __atomic_load_n(&global_knob3, __ATOMIC_RELAXED);
+      uint8_t knob2rotation = __atomic_load_n(&global_knob2, __ATOMIC_RELAXED);
 
-      // Knob 3 (volume)
-      u8g2.drawStr(80, 10, "Vol"); // write something to the internal memory
-      u8g2.setCursor(110, 10);
-      // u8g2.print(knob3.get_rotation_atomic(), DEC);
-      u8g2.print(knob3rotation, DEC);
+      // Knobs
+      u8g2.drawStr(80, 10, "Volume"); // write something to the internal memory
+      u8g2.setCursor(115, 10);
+      u8g2.print(knob3rotation);
 
       // Knob 2 (waveform)
       u8g2.drawStr(5, 10, "Waveform"); // write something to the internal memory
-      // drawWaveform(knob2.get_rotation_atomic());
+#ifdef TEST_UPDATEDISPLAYTASK
+      drawWaveform(0); // sine waveform
+#else
       drawWaveform(knob2rotation);
-
-      // u8g2.setCursor(10, 10);
-      // u8g2.print(numberOfKeyboards, DEC);
-      // u8g2.print(keyboardIndex, DEC);
-
-      // note showing
-      u8g2.drawStr(80, 30, "Note"); // write something to the internal memory
-      // u8g2.drawStr(120, 30, notes[note]);
-
-      u8g2.setCursor(105, 30);
+#endif
+      noteToDisplay = 12;
       xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-      u8g2.print(g_ss, HEX);
+      int s = 1;
+      for (int i = 0; i < 12; i++)
+      {
+        if ((g_note_states[0] & s) || (g_note_states[1] & s) || (g_note_states[2] & s))
+        {
+          note = i;
+        }
+        s <<= 1;
+      }
       xSemaphoreGive(notesArrayMutex);
-
       // note showing
-      // u8g2.drawStr(2, 30, notes[note]);
+      // u8g2.drawStr(80, 30, "Note"); // write something to the internal memory // make back to 30
+      u8g2.drawStr(60, 20, notes[note]);
     }
-    else if (keyboardIndex == 1 || keyboardIndex == 2)
+    // Second keyboard display: Panning, Record(record loop), Play (play loop), Attack level
+    else if (keyboardIndex == 1)
     {
-      u8g2.drawStr(5, 10, "VOL");
-      u8g2.drawStr(40, 10, "VOL");
-      u8g2.drawStr(75, 10, "VOL");
-      u8g2.drawStr(110, 10, "VOL");
-      u8g2.setCursor(5, 20);
-      u8g2.print(local_knob0.get_rotation_atomic(), DEC);
-      u8g2.setCursor(40, 20);
-      u8g2.print(local_knob1.get_rotation_atomic(), DEC);
-      u8g2.setCursor(75, 20);
-      u8g2.print(local_knob2.get_rotation_atomic(), DEC);
-      u8g2.setCursor(110, 20);
-      u8g2.print(local_knob3.get_rotation_atomic(), DEC);
-    }
+      u8g2.drawStr(5, 10, "PAN");
+      u8g2.drawStr(40, 10, "REC");
+      u8g2.drawStr(75, 10, "PLAY");
+      u8g2.drawStr(110, 10, "ATK");
 
-    // direction of rotation
+      uint8_t knob4rotation = __atomic_load_n(&global_knob4, __ATOMIC_RELAXED);
+      uint8_t knob7rotation = __atomic_load_n(&global_knob7, __ATOMIC_RELAXED);
+      drawKnobLevel(5, knob4rotation);
+      drawKnobLevel(110, knob7rotation);
+
+      // Displaying appropriate symbols based on record/play
+      if (__atomic_load_n(&loop_record, __ATOMIC_RELAXED))
+      {
+        recordButton();
+      }
+      if (__atomic_load_n(&loop_play, __ATOMIC_RELAXED))
+      {
+        playButton();
+      }
+    }
+    // Third keyboard display: Decay, Sustain, Tempo , Metronome display
+    else
+    {
+      u8g2.drawStr(5, 10, "DEC");
+      u8g2.drawStr(40, 10, "SUS");
+      u8g2.drawStr(75, 10, "TMP");
+      u8g2.drawStr(110, 10, "MET");
+
+      // Knob levels for Decay/Sustain
+      uint8_t knob8rotation = local_knob0.get_rotation();
+      uint8_t knob9rotation = local_knob1.get_rotation();
+      drawKnobLevel(5, knob8rotation);
+      drawKnobLevel(40, knob9rotation);
+
+      // setting tempo
+      u8g2.setCursor(75, 30);
+      u8g2.print(40 + 15 * __atomic_load_n(&global_knob10, __ATOMIC_RELAXED));
+      // metronome square
+      if (__atomic_load_n(&metronomeBeep, __ATOMIC_RELAXED))
+      {
+        metronomeDraw();
+      }
+    }
     u8g2.sendBuffer(); // transfer internal memory to the display
 
     // Toggle LED
     digitalToggle(LED_BUILTIN);
+
+#ifdef TEST_UPDATEDISPLAYTASK
+    break;
+#endif
   }
 }
 
+// Scannign keys task
 void scanKeysTask(void *pvParameters)
 {
   const TickType_t xFrequency = 20 / portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
-  uint8_t knob2keymatrix, knob3keymatrix, knob1keymatrix, knob0keymatrix;
+  // variables for decoding the knobs
+  uint8_t knob3keymatrix, knob2keymatrix, knob1keymatrix, knob0keymatrix;
   uint16_t toAnd, keys;
   bool pressed;
   uint8_t TX_Message[8] = {0};
+
   while (1)
   {
+#ifndef TEST_SCANKEYSTASK
     vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
 
     // use mutex to access keyarray
     xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
@@ -590,10 +917,18 @@ void scanKeysTask(void *pvParameters)
       keyArray[i] = readCols();
       digitalWrite(REN_PIN, 0);
     }
-    xSemaphoreGive(keyArrayMutex);
 
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     keys = (keyArray[2] << 8) + (keyArray[1] << 4) + keyArray[0];
+
+#ifndef TEST_SCANKEYSTASK
+    if (keyboardIndex == 1)
+#else
+    if (1)
+#endif
+    {
+      __atomic_store_n(&loop_play, !(keyArray[5] & 1), __ATOMIC_RELAXED);
+      __atomic_store_n(&loop_record, !(keyArray[6] & 2), __ATOMIC_RELAXED);
+    }
 
     // knob key matrices
     knob3keymatrix = keyArray[3] & 0x03;
@@ -601,23 +936,48 @@ void scanKeysTask(void *pvParameters)
     knob1keymatrix = keyArray[4] & 0x03;
     knob0keymatrix = (keyArray[4] & 0x0C) >> 2;
     xSemaphoreGive(keyArrayMutex);
+
+    // update_rotation is an atomic update
     local_knob3.update_rotation(knob3keymatrix);
-    global_knob3 = local_knob3.get_rotation_atomic();
     local_knob2.update_rotation(knob2keymatrix);
-    global_knob2 = local_knob2.get_rotation_atomic();
     local_knob1.update_rotation(knob1keymatrix);
-    global_knob1 = local_knob1.get_rotation_atomic();
     local_knob0.update_rotation(knob0keymatrix);
-    global_knob0 = local_knob0.get_rotation_atomic();
+
+    // assigning knobs appropriately for multiple keyboards
+    if (keyboardIndex == 0)
+    {
+      __atomic_store_n(&global_knob0, local_knob0.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob1, local_knob1.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob2, local_knob2.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob3, local_knob3.get_rotation_atomic(), __ATOMIC_RELAXED);
+    }
+    else if (keyboardIndex == 1)
+    {
+      __atomic_store_n(&global_knob4, local_knob0.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob5, local_knob1.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob6, local_knob2.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob7, local_knob3.get_rotation_atomic(), __ATOMIC_RELAXED);
+    }
+    else
+    {
+      __atomic_store_n(&global_knob8, local_knob0.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob9, local_knob1.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob10, local_knob2.get_rotation_atomic(), __ATOMIC_RELAXED);
+      __atomic_store_n(&global_knob11, local_knob3.get_rotation_atomic(), __ATOMIC_RELAXED);
+    }
 
     // note_states represents a 12-bit state of all notes
     uint16_t note_states = 0;
-    uint16_t toAnd = 1;
+    toAnd = 1;
     bool pressed = false;
 
     for (int i = 0; i < 12; ++i)
     {
+#ifndef TEST_SCANKEYSTASK
       if (!((keys & toAnd) & 0xfff))
+#else
+      if (1)
+#endif
       {
         // note pressed
         note_states += toAnd;
@@ -626,60 +986,339 @@ void scanKeysTask(void *pvParameters)
       }
       toAnd = toAnd << 1;
     }
+
     int msg_states = note_states;
+
+    // Transmit messages to other boards
     TX_Message[0] = keyboardIndex;
     TX_Message[1] = msg_states & 0xf;
     msg_states = msg_states >> 4;
     TX_Message[2] = msg_states & 0xf;
     msg_states = msg_states >> 4;
     TX_Message[3] = msg_states & 0xf;
+
+    // Sending knob messages
     uint8_t temp_knob0, temp_knob1, temp_knob2, temp_knob3;
     temp_knob0 = local_knob0.get_rotation_atomic();
     temp_knob1 = local_knob1.get_rotation_atomic();
     temp_knob2 = local_knob2.get_rotation_atomic();
     temp_knob3 = local_knob3.get_rotation_atomic();
-    TX_Message[4] = temp_knob0 & 0xf;
-    TX_Message[5] = temp_knob1 & 0xf;
-    TX_Message[6] = temp_knob2 & 0xf;
-    TX_Message[7] = temp_knob3 & 0xf;
+    TX_Message[4] = ((temp_knob1 & 0xf) << 4) + (temp_knob0 & 0xf);
+    TX_Message[5] = ((temp_knob3 & 0xf) << 4) + (temp_knob2 & 0xf);
+
+// Sending loop information
+#ifndef TEST_SCANKEYSTASK
+    if (keyboardIndex == 1)
+#else
+    if (1)
+#endif
+    {
+      TX_Message[6] = __atomic_load_n(&loop_record, __ATOMIC_RELAXED);
+      TX_Message[7] = __atomic_load_n(&loop_play, __ATOMIC_RELAXED);
+    }
+
+#ifndef TEST_SCANKEYSTASK
     if (numberOfKeyboards > 1)
+#else
+    if (1)
+#endif
     {
       CAN_TX(0x123, TX_Message);
     }
 
-    // Put in mutex?
-
     __atomic_store_n(&bendStep, 2 * 8080 * (512 - analogRead(JOYX_PIN)), __ATOMIC_RELAXED);
 
+    uint16_t newNotes0, newNotes1, newNotes2;
+
     xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    g_note_states[0] = note_states; // need to protect this at some point!!
+    g_note_states[keyboardIndex] = note_states;
+
+    // Envelope handling
+    for (int i = 0; i < 12; i++)
+    {
+// Lower board envelope
+#ifndef TEST_SCANKEYSTASK
+      if (!envActive[i] && ((g_note_states[0] & (1 << i)) != 0))
+#else
+      if (1)
+#endif
+      {
+        envActive[i] = true;
+        startEnvelopeTask(i);
+      }
+
+// Middle board envelope
+#ifndef TEST_SCANKEYSTASK
+      if (!envActive[i + 12] && ((g_note_states[1] & (1 << i)) != 0))
+#else
+      if (1)
+#endif
+      {
+        envActive[i + 12] = true;
+        startEnvelopeTask(i + 12);
+      }
+
+// Upper board envelope
+#ifndef TEST_SCANKEYSTASK
+      if (!envActive[i + 24] && ((g_note_states[2] & (1 << i)) != 0))
+#else
+      if (1)
+#endif
+      {
+        envActive[i + 24] = true;
+        startEnvelopeTask(i + 24);
+      }
+    }
+
+// Further loop handling
+#ifndef TEST_SCANKEYSTASK
+    if (__atomic_load_n(&loopPlaying, __ATOMIC_RELAXED) && (keyboardIndex == 1))
+#else
+    if (1)
+#endif
+    {
+      newNotes0 = (recorded_g_note_states[loopIndex][0]) & (~g_note_states[0]);
+      newNotes1 = (recorded_g_note_states[loopIndex][1]) & (~g_note_states[1]);
+      newNotes2 = (recorded_g_note_states[loopIndex][2]) & (~g_note_states[2]);
+
+      int s = 1;
+      for (int i = 0; i < 12; i++)
+      {
+#ifndef TEST_SCANKEYSTASK
+        if ((newNotes0 & s) != 0)
+#else
+        if (1)
+#endif
+        {
+          envActive[i] = true;
+          startEnvelopeTask(i);
+        }
+
+#ifndef TEST_SCANKEYSTASK
+        if ((newNotes1 & s) != 0)
+#else
+        if (1)
+#endif
+        {
+          envActive[i + 12] = true;
+          startEnvelopeTask(i + 12);
+        }
+
+#ifndef TEST_SCANKEYSTASK
+        if ((newNotes2 & s) != 0)
+#else
+        if (1)
+#endif
+        {
+          envActive[i + 24] = true;
+          startEnvelopeTask(i + 24);
+        }
+        s <<= 1;
+      }
+
+      g_note_states[0] |= recorded_g_note_states[loopIndex][0];
+      g_note_states[1] |= recorded_g_note_states[loopIndex][1];
+      g_note_states[2] |= recorded_g_note_states[loopIndex][2];
+    }
+
     g_ss = (uint64_t)g_note_states[0] + ((uint64_t)g_note_states[1] << 12) + ((uint64_t)g_note_states[2] << 24);
+
     xSemaphoreGive(notesArrayMutex);
+
+#ifdef TEST_SCANKEYSTASK
+    break;
+#endif
+  }
+}
+
+// Looping (play) task
+void playLoopTask(void *pvParameters)
+{
+  const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
+
+  int currentIndexPlaying = 0;
+  loopIndex = 0;
+  bool button_pressed;
+
+  while (1)
+  {
+#ifndef TEST_PLAYLOOPTASK
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
+#ifndef TEST_PLAYLOOPTASK
+    if (!__atomic_load_n(&loop_record, __ATOMIC_RELAXED))
+#else
+    if (1)
+#endif
+    {
+      button_pressed = __atomic_load_n(&loop_play, __ATOMIC_RELAXED);
+    }
+    else
+    {
+      button_pressed = false;
+    }
+
+#ifndef TEST_PLAYLOOPTASK
+    if (!button_pressed)
+#else
+    if (0)
+#endif
+    {
+      currentIndexPlaying = 0;
+      __atomic_store_n(&loopPlaying, false, __ATOMIC_RELAXED);
+    }
+    else
+    {
+      __atomic_store_n(&loopPlaying, true, __ATOMIC_RELAXED);
+      loopIndex = currentIndexPlaying;
+      currentIndexPlaying++;
+      if (currentIndexPlaying >= __atomic_load_n(&endLoopIndex, __ATOMIC_RELAXED))
+      {
+        currentIndexPlaying = 0;
+      }
+    }
+
+#ifdef TEST_PLAYLOOPTASK
+    break;
+#endif
+  }
+}
+
+// Looping (record) task
+void recordLoopTask(void *pvParameters)
+{
+  const TickType_t xFrequency = 50 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  int currentIndexRecording = 0;
+  bool button_pressed;
+  endLoopIndex = 200;
+  while (1)
+  {
+#ifndef TEST_RECORDLOOPTASK
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+
+    button_pressed = __atomic_load_n(&loop_record, __ATOMIC_RELAXED);
+
+#ifndef TEST_RECORDLOOPTASK
+    if (!button_pressed)
+#else
+    if (0)
+#endif
+    {
+      currentIndexRecording = 0;
+    }
+    else
+    {
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+
+#ifndef TEST_RECORDLOOPTASK
+      if (currentIndexRecording == 0)
+#else
+      if (1)
+#endif
+      {
+        for (int i = 0; i < 100; ++i)
+        {
+          recorded_g_note_states[i][0] = 0;
+          recorded_g_note_states[i][1] = 0;
+          recorded_g_note_states[i][2] = 0;
+        }
+      }
+      if (currentIndexRecording < 200)
+      {
+        endLoopIndex = currentIndexRecording;
+        recorded_g_note_states[currentIndexRecording][0] = g_note_states[0];
+        recorded_g_note_states[currentIndexRecording][1] = g_note_states[1];
+        recorded_g_note_states[currentIndexRecording][2] = g_note_states[2];
+        currentIndexRecording += 1;
+      }
+      xSemaphoreGive(notesArrayMutex);
+    }
+
+#ifdef TEST_RECORDLOOPTASK
+    break;
+#endif
+  }
+}
+
+// Mentronome task
+void metronomeTask(void *pvParameters)
+{
+#ifndef TEST_METRONOMETASK
+  if (keyboardIndex != 2)
+#else
+  if (0)
+#endif
+  {
+    vTaskDelete(NULL);
+  }
+
+  __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
+  const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  int numberOfCycles = 15;
+  int currentCycle = 0;
+  while (1)
+  {
+#ifndef TEST_METRONOMETASK
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+#endif
+    numberOfCycles = (600) / (40 + 15 * __atomic_load_n(&global_knob10, __ATOMIC_RELAXED));
+    currentCycle += 1;
+
+#ifndef TEST_METRONOMETASK
+    if (currentCycle == numberOfCycles - 3)
+#else
+    if (0)
+#endif
+    {
+      __atomic_store_n(&metronomeBeep, true, __ATOMIC_RELAXED);
+    }
+
+#ifndef TEST_METRONOMETASK
+    if (currentCycle >= numberOfCycles)
+#else
+    if (1)
+#endif
+    {
+      __atomic_store_n(&metronomeBeep, false, __ATOMIC_RELAXED);
+      currentCycle = 0;
+    }
+
+#ifdef TEST_METRONOMETASK
+    break;
+#endif
   }
 }
 
 void handShake()
 {
-
+  // for three seconds, check for neighbouring keyboards
   uint32_t startup = millis();
-  uint32_t current = startup;
-  while (current < startup + 3000) // for 4 seconds
+  while (millis() < startup + 3000)
   {
-    current = millis();
-    // use mutex to access keyarray
     for (int i = 0; i < 7; ++i)
     {
       setRow(i);
+      // Set value to latch in DFF
       if (i == 5 || i == 6)
       {
         digitalWrite(OUT_PIN, 1);
       }
-      // Set value to latch in DFF
-      digitalWrite(REN_PIN, 1); // Enable selected row
+
+      digitalWrite(REN_PIN, 1);
       delayMicroseconds(3);
       keyArray[i] = readCols();
       digitalWrite(REN_PIN, 0);
     }
+
+    // detect neighbouring keyboards
     if (!(keyArray[5] & 0b1000))
     {
       west = true;
@@ -689,6 +1328,7 @@ void handShake()
       east = true;
     }
   }
+
   // transmit 1 if west and east. else transmit 0 or 2.
   uint8_t TX_Message[8] = {0};
   if (west && east)
@@ -702,15 +1342,12 @@ void handShake()
     return;
   }
 
-  // TX_Message[0] = 2;
   uint8_t RX_Message[8] = {0};
   uint32_t ID;
   uint32_t start = millis();
-  uint32_t current2 = start;
 
-  while (current2 < (start + 3000))
+  while (millis() < (start + 3000))
   {
-    current2 = millis();
     if (CAN_CheckRXLevel() > 0)
     {
       CAN_RX(ID, RX_Message);
@@ -743,7 +1380,7 @@ void handShake()
     }
     return;
   }
-  Serial.println("got here yay");
+
   numberOfKeyboards = 1;
   keyboardIndex = 0;
   return;
@@ -779,42 +1416,32 @@ void setup()
   Serial.begin(9600);
   Serial.println("Hello World");
 
-  // thread initialisation
+// thread initialisation
+#ifndef DISABLE_THREADS
   TaskHandle_t sampleGenerationHandle = NULL;
-  xTaskCreate(
-      sampleGenerationTask,     /* Function that implements the task */
-      "sampleGeneration",       /* Text name for the task */
-      256,                      /* Stack size in words, not bytes */
-      NULL,                     /* Parameter passed into the task */
-      4,                        /* Task priority */
-      &sampleGenerationHandle); /* Pointer to store the task handle */
+  xTaskCreate(sampleGenerationTask, "sampleGeneration", 256, NULL, 8, &sampleGenerationHandle);
+
+  TaskHandle_t loopRecordHandle = NULL;
+  xTaskCreate(recordLoopTask, "recordLoop", 256, NULL, 2, &loopRecordHandle);
+
+  TaskHandle_t loopPlayHandle = NULL;
+  xTaskCreate(playLoopTask, "playLoop", 256, NULL, 3, &loopPlayHandle);
 
   TaskHandle_t scanKeysHandle = NULL;
-  xTaskCreate(
-      scanKeysTask,     /* Function that implements the task */
-      "scanKeys",       /* Text name for the task */
-      64,               /* Stack size in words, not bytes */
-      NULL,             /* Parameter passed into the task */
-      3,                /* Task priority */
-      &scanKeysHandle); /* Pointer to store the task handle */
+  xTaskCreate(scanKeysTask, "scanKeys", 128, NULL, 7, &scanKeysHandle);
 
   TaskHandle_t scanOtherBoards = NULL;
-  xTaskCreate(
-      scanOtherBoardsTask, /* Function that implements the task */
-      "scanOtherBoards",   /* Text name for the task */
-      64,                  /* Stack size in words, not bytes */
-      NULL,                /* Parameter passed into the task */
-      2,                   /* Task priority */
-      &scanKeysHandle);    /* Pointer to store the task handle */
+  xTaskCreate(scanOtherBoardsTask, "scanOtherBoards", 64, NULL, 6, &scanKeysHandle);
 
   TaskHandle_t updateDisplayHandle = NULL;
-  xTaskCreate(
-      updateDisplayTask,     /* Function that implements the task */
-      "updateDisplay",       /* Text name for the task */
-      64,                    /* Stack size in words, not bytes */
-      NULL,                  /* Parameter passed into the task */
-      1,                     /* Task priority */
-      &updateDisplayHandle); /* Pointer to store the task handle */
+  xTaskCreate(updateDisplayTask, "updateDisplay", 64, NULL, 1, &updateDisplayHandle);
+
+  TaskHandle_t setVibStep = NULL;
+  xTaskCreate(setVibStepTask, "setVibrato", 64, NULL, 4, &setVibStep);
+
+  TaskHandle_t metronome = NULL;
+  xTaskCreate(metronomeTask, "metronome", 64, NULL, 5, &metronome);
+#endif
 
   keyArrayMutex = xSemaphoreCreateMutex();
   notesArrayMutex = xSemaphoreCreateMutex();
@@ -827,7 +1454,10 @@ void setup()
 
   // Interrupt to execute the note playing
   sampleTimer->setOverflow(22000, HERTZ_FORMAT);
+
+#ifndef DISABLE_ISRs
   sampleTimer->attachInterrupt(sampleISR);
+#endif
   sampleTimer->resume();
 
   // Initialise CAN
@@ -835,20 +1465,121 @@ void setup()
   setCANFilter(0x123, 0x7ff);
   CAN_Start();
   handShake();
+
   // setting local knob limits
   local_knob3.set_limits(0, 8);
-  local_knob2.set_limits(0, 8);
-  local_knob1.set_limits(0, 8);
 
+  local_knob1.set_limits(0, 8);
   if (keyboardIndex == 0)
   {
     local_knob0.set_limits(-3, 3);
+    local_knob2.set_limits(0, 3);
   }
   else
   {
     local_knob0.set_limits(0, 8);
+    local_knob2.set_limits(0, 8);
   }
-  Serial.println("finished handshaking");
+
+#ifdef TEST_SETVIBSTEPTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    setVibStepTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SAMPLEGENERATIONTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    sampleGenerationTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SCANOTHERBOARDSTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    scanOtherBoardsTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_UPDATEDISPLAYTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    updateDisplayTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SCANKEYSTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    scanKeysTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_PLAYLOOPTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    playLoopTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_RECORDLOOPTASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    recordLoopTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_METRONOMETASK
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    metronomeTask(NULL);
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
+#ifdef TEST_SAMPLEISR
+  uint32_t startTime = micros();
+  for (int iter = 0; iter < 32; iter++)
+  {
+    sampleISR();
+  }
+  Serial.println(micros() - startTime);
+  while (1)
+    ;
+#endif
+
   vTaskStartScheduler();
 }
 

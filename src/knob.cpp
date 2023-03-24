@@ -41,7 +41,8 @@ void Knob::update_rotation(uint8_t keymatrix)
     }
     previous = keymatrix;
 
-    if (add != 0) {
+    if (add != 0)
+    {
         __atomic_store_n(&rotation, current_rotation + add, __ATOMIC_RELAXED);
     }
 }
