@@ -22,7 +22,7 @@ $\Huge L_n = \sum_{i=1}[\frac{\tau_n}{\tau_i}]\cdot T_i \le \tau_n$
 
 where $\tau_i$ is the initiation interval and $T_i$ is the execution time for task for task $i$.
 
-$L_n$ was found to be (excluding the sampleISR) to be $85.27 \le 100$. This indicates that the
+$L_n$ was found to be (excluding the sampleISR) to be $85.27 \le 100$. 
 
 ## Total CPU utilisation
 
