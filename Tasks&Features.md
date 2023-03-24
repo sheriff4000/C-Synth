@@ -21,6 +21,7 @@
 - Aesthetic graphical user interface
   - Easy to use user interface displaying all knob values 
 
+
 ## Tasks (thread/interrupt)
 Overview: 
 
