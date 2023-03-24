@@ -1,9 +1,9 @@
 # Tasks & Features
 
-## Advanced features 
+## Advanced features
 
 - Polyphony
-  - Multiplie chords can be played together   
+  - Multiplie chords can be played together
 - Pitch bend
   - Joystick on the left keyboard can execute pitch bend (slighly raise or lower the pitch of notes being played) by moving right or left
 - Vibrato
@@ -11,32 +11,32 @@
 - Global stereo speakers
   - All speakers output current Vout
 - Panning of speakers
-  - Move the location of speaker output to different speakers when connected 
+  - Move the location of speaker output to different speakers when connected
 - Envelope
-  - Attack, Sustain, Decay 
+  - Attack, Sustain, Decay
 - Multiple output waveforms (sine, triangle, sawtooth, pulse)
-  - Different waveforms output to Vout 
+  - Different waveforms output to Vout
 - Looping
-  - Current melody recorded and can be played on loop until desired 
+  - Current melody recorded and can be played on loop until desired
 - Aesthetic graphical user interface
-  - Easy to use user interface displaying all knob values 
-
+  - Easy to use user interface displaying all knob values
 
 ## Tasks (thread/interrupt)
-Overview: 
+
+Overview:
 
 |         Task         | Interrupt/Thread | Priority | Stack size |
-|:--------------------:|------------------|:--------:|------------|
-| sampleGenerationTask | Thread           |     8    | 256        |
-|     scanKeysTask     | Thread           |     7    | 128        |
-| scanOtherBoards      | Thread           | 6        | 64         |
-| setVibStepTask       | Thread           | 5        | 64         |
-|   updateDisplayTask  | Thread           |     4    | 64         |
-| metronomeTask        | Thread           | 3        | 64         |
-| playLoopTask         | Thread           | 2        | 256        |
-|    recordLoopTask    | Thread           |     1    | 256        |
-| startEnvelopeTask    | Thread           | 1        | 256        |
-|       sampleISR      | Interrupt        |  22000Hz |            |
+| :------------------: | ---------------- | :------: | ---------- |
+| sampleGenerationTask | Thread           |    8     | 256        |
+|     scanKeysTask     | Thread           |    7     | 128        |
+|   scanOtherBoards    | Thread           |    6     | 64         |
+|    setVibStepTask    | Thread           |    4     | 64         |
+|  updateDisplayTask   | Thread           |    1     | 64         |
+|    metronomeTask     | Thread           |    5     | 64         |
+|     playLoopTask     | Thread           |    3     | 256        |
+|    recordLoopTask    | Thread           |    2     | 256        |
+|  startEnvelopeTask   | Thread           |    1     | 256        |
+|      sampleISR       | Interrupt        | 22000Hz  |            |
 
 **sampleGenerationTask**
 
@@ -44,7 +44,7 @@ This task takes the current state of each key, as well as all of the values of t
 
 **scanKeysTask**
 
-This function reads the state of each key in the keyboard, as well as the values of each knob. It then updates the state variables keeping track of each of these values, as well as transmits the state of the keyboard (the state of each key and the value of each knob) to the other connected keyboards via CAN. 
+This function reads the state of each key in the keyboard, as well as the values of each knob. It then updates the state variables keeping track of each of these values, as well as transmits the state of the keyboard (the state of each key and the value of each knob) to the other connected keyboards via CAN.
 
 **scanOtherBoardsTask**
 
@@ -63,22 +63,17 @@ This task produces a graphical display on each keyboard. For the leftmost keyboa
 
 This function takes the Vout values written into the sampleBuffer and writes them to the analog output pin which creates the sound. This task is implemented as an interrupt, because it is run at an extremely fast frequency and has priority over any other task performed by the system, so must be able to stop the execution of the other tasks at any point.
 
-
 **keyPressExecution**
 keyPressExecution is activated in order for a note to be played, it increments and decrements a multiplier used to set the amplitude of a note's signal.
-
 
 **recordLoopTask**
 
 This task is used for our looping function - an advanced feature. Once global knob 5 is being held, the task stores the value of each key every 50ms, and stores these note states in a 2D array. This allows a sequence of notes being played to be stored, able to be played back in the playLoopTask.
 
-
 **playLoopTask**
 
 This task is used to play the notes that were saved during recordLoopTask in order, at the same speed as recorded, when global knob 6 is being held. Once the playback reaches the end of the saved sequence, the sequence plays back from the start. The task is implemented as a task which runs at the same frequency as recordLoopTask, to allow the playback of the recorded sound to be at the same speed as the recording.
 
-
-
 **metronomeTask**
- 
+
 The metronome task maintains a steadily ticking metronome. It does this by looping every 100ms and 'beeping' at regular intervals. This 'beep' is implemented by setting a global boolean value to be high for a short amount of time at regular intervals. The gap between each interval is set in the task by reading the value of global_knob10, which sets the tempo of the metronome. This function is implemented as a task.

@@ -816,18 +816,20 @@ void updateDisplayTask(void *pvParameters)
 #else
       drawWaveform(knob2rotation);
 #endif
-    noteToDisplay = 12;
-    xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
-    int s = 1;
-    for(int i = 0; i < 12; i++){
-      if((g_note_states[0] & s) || (g_note_states[1] & s) || (g_note_states[2] & s) ){
-        note = i;
+      noteToDisplay = 12;
+      xSemaphoreTake(notesArrayMutex, portMAX_DELAY);
+      int s = 1;
+      for (int i = 0; i < 12; i++)
+      {
+        if ((g_note_states[0] & s) || (g_note_states[1] & s) || (g_note_states[2] & s))
+        {
+          note = i;
+        }
+        s <<= 1;
       }
-      s <<= 1;
-    }
-    xSemaphoreGive(notesArrayMutex);
+      xSemaphoreGive(notesArrayMutex);
       // note showing
-      //u8g2.drawStr(80, 30, "Note"); // write something to the internal memory // make back to 30
+      // u8g2.drawStr(80, 30, "Note"); // write something to the internal memory // make back to 30
       u8g2.drawStr(60, 20, notes[note]);
     }
     // Second keyboard display: Panning, Record(record loop), Play (play loop), Attack level
@@ -1466,13 +1468,15 @@ void setup()
 
   // setting local knob limits
   local_knob3.set_limits(0, 8);
-  
+
   local_knob1.set_limits(0, 8);
-  if (keyboardIndex == 0){
+  if (keyboardIndex == 0)
+  {
     local_knob0.set_limits(-3, 3);
     local_knob2.set_limits(0, 3);
   }
-  else{
+  else
+  {
     local_knob0.set_limits(0, 8);
     local_knob2.set_limits(0, 8);
   }
